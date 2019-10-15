@@ -32,7 +32,7 @@ bool websocket::connect(const string &url) {
 
 websocket &websocket::emit(const string &str) {
     LOCK(lock);
-    taskQueue_.emplace_back(threadPool_.enqueue([this, str]{
+    taskQueue_.emplace_back(threadPool_.enqueue([this, &str]{
         auto wsconnect = this->getConnection();
         wsconnect->send(str);
         wsconnect->poll();
@@ -125,4 +125,34 @@ easywsclient::WebSocket::pointer websocket::getConnection() {
 void websocket::recycleConnection(easywsclient::WebSocket::pointer pointer) {
     LOCK(queueLock);
     wsconnectQueue.push_back(pointer);
+}
+
+websocket &websocket::operator>>(const nlohmann::json &json) {
+    string response = getMessageSync();
+
+    return *this;
+}
+
+string websocket::getMessageSync() {
+    string message;
+    auto wsconnect = getConnection();
+    while(wsconnect->getReadyState() != WebSocket::CLOSED) {
+        wsconnect->poll();
+        wsconnect->dispatch([&message](const string& msg) {
+            message = msg;
+        });
+        if (!message.empty()) {
+            break;
+        }
+    }
+    recycleConnection(wsconnect);
+    return message;
+}
+
+template<class Callable>
+string websocket::getMessageAsync(Callable callable) {
+    threadPool_.enqueue([this, &callable]{
+        auto response = this->getMessageSync();
+        callable(response);
+    });
 }

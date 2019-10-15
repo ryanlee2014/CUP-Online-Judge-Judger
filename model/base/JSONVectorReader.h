@@ -13,8 +13,9 @@
 using std::cout;
 using std::string;
 using std::vector;
+using namespace rapidjson;
 using rapidjson::Document;
-
+using rapidjson::Value;
 class JSONVectorReader {
 public:
     JSONVectorReader(const string &filePath);
@@ -32,6 +33,14 @@ public:
     string GetString(string key);
 
     int GetInt(string key);
+
+    double GetDouble(string key);
+
+    float GetFloat(string key);
+
+    void GetCharString(string key, char* dest);
+
+    auto GetObject(string key);
 
     void documentIsLoaded();
 

@@ -9,8 +9,6 @@
 #include <fstream>
 #define ASSERT_VALID(x) assert(x)
 using std::fstream;
-using rapidjson::Document;
-using rapidjson::Value;
 using std::cout;
 using namespace std;
 JSONVectorReader::JSONVectorReader(const string &filePath) {
@@ -75,6 +73,45 @@ void JSONVectorReader::documentIsLoaded() {
     if (!isLoad) {
         throw "No JSON file is loaded";
     }
+}
+
+auto JSONVectorReader::GetObject(string key) {
+    documentIsLoaded();
+    auto findMember = document.FindMember(key.c_str());
+    if (findMember == document.MemberEnd()) {
+        //return ;
+        return Value(kObjectType).GetObject();
+    }
+    auto& val = document[key.c_str()];
+    ASSERT_VALID(val.IsObject());
+    return val.GetObject();
+}
+
+double JSONVectorReader::GetDouble(string key) {
+    documentIsLoaded();
+    auto findMember = document.FindMember(key.c_str());
+    if (findMember == document.MemberEnd()) {
+        return 0;
+    }
+    auto& val = document[key.c_str()];
+    ASSERT_VALID(val.IsDouble());
+    return val.GetDouble();
+}
+
+float JSONVectorReader::GetFloat(string key) {
+    documentIsLoaded();
+    auto findMember = document.FindMember(key.c_str());
+    if (findMember == document.MemberEnd()) {
+        return 0;
+    }
+    auto& val = document[key.c_str()];
+    ASSERT_VALID(val.IsFloat());
+    return val.GetFloat();
+}
+
+void JSONVectorReader::GetCharString(string key, char *dest) {
+    string response = this->GetString(key);
+    strcpy(dest, response.c_str());
 }
 
 

@@ -800,6 +800,16 @@ void get_solution(int solution_id, char *work_dir, int lang, char *usercode) {
     fclose(fp_src);
 }
 
+void write_custominput(const char* custominput) {
+    FILE *fp_src = fopen("data.in", "w");
+    fprintf(fp_src, "%s", custominput);
+    fclose(fp_src);
+}
+
+void write_custominput(string& custominput) {
+    write_custominput(custominput.c_str());
+}
+
 
 void get_custominput(int solution_id, char *work_dir) {
     char sql[BUFFER_SIZE], src_pth[BUFFER_SIZE];
@@ -812,13 +822,7 @@ void get_custominput(int solution_id, char *work_dir) {
     res = mysql_store_result(conn);
     row = mysql_fetch_row(res);
     if (row != nullptr) {
-
-        // create the src file
-        sprintf(src_pth, "data.in");
-        FILE *fp_src = fopen(src_pth, "w");
-        fprintf(fp_src, "%s", row[0]);
-        fclose(fp_src);
-
+        write_custominput(row[0]);
     }
     mysql_free_result(res);
 }
@@ -1620,7 +1624,6 @@ void print_call_array() {
 
 }
 
-
 int main(int argc, char **argv) {
     char work_dir[BUFFER_SIZE];
     char usercode[CODESIZE];
@@ -1630,409 +1633,837 @@ int main(int argc, char **argv) {
     int p_id, memoryLimit, lang, SPECIAL_JUDGE, sim, sim_s_id = ZERO_SIM;
     double max_case_time = ZERO_TIME;
     double timeLimit;
-    init_parameters(argc, argv, solution_id, runner_id);
-    init_mysql_conf();
-    initWebSocketConnection("localhost", 5100);
-    if (!conn.start()) {
-        cerr << "Failed to create a MYSQL connection." << endl;
-        exit(0); //exit if mysql is down
-    }
-    //set work directory to start running & judging
-    sprintf(work_dir, "%s/run%d/", oj_home, runner_id);
-    string global_work_dir = string(work_dir);
-    clean_workdir(work_dir);
-    if (SHARE_MEMORY_RUN)
-        mk_shm_workdir(work_dir);
-
-    chdir(work_dir);
-    get_solution_info(solution_id, p_id, user_id, lang);
-    get_problem_info(abs(p_id), timeLimit, memoryLimit, SPECIAL_JUDGE);
-    //get the limit
-    if (p_id <= TEST_RUN_SUBMIT) {//Is custom input
-        SPECIAL_JUDGE = NONE_SPECIAL_JUDGE;
-    }
-    //copy source file
-    get_solution(solution_id, work_dir, lang, usercode);
-    //java is lucky
-    if (lang != OBJC && !isCOrCPP(lang) && lang != PASCAL) {  // Clang Clang++ not VM or Script
-        // the limit for java
-        timeLimit = timeLimit * javaTimeBonus + javaTimeBonus;
-        memoryLimit = memoryLimit + java_memory_bonus;
-        // copy java.policy
-        if (isJava(lang)) {
-            execute_cmd("/bin/cp %s/etc/java0.policy %s/java.policy", oj_home, work_dir);
-            execute_cmd("chmod 755 %s/java.policy", work_dir);
-            execute_cmd("chown judge %s/java.policy", work_dir);
-        }
-    }
-
-    //never bigger than judged set value;
-    if (timeLimit > 300 * SECOND || timeLimit < ZERO) {
-        timeLimit = 300 * SECOND;
-    }
-    if (memoryLimit > ONE_KILOBYTE || memoryLimit < ONE) {
-        memoryLimit = ONE_KILOBYTE;//ONE_KILOBYTE MB
-    }
-    if (DEBUG) {
-        printf("time: %f mem: %d\n", timeLimit, memoryLimit);
-    }
-
-    bundle.clear();
-    bundle.setJudger(http_username);
-    bundle.setSolutionID(solution_id);
-    bundle.setResult(COMPILING);
-    bundle.setFinished(NOT_FINISHED);
-    bundle.setUsedTime(ZERO_TIME);
-    bundle.setMemoryUse(ZERO_MEMORY);
-    bundle.setPassPoint(ZERO_PASSPOINT);
-    bundle.setPassRate(ZERO_PASSRATE);
-    webSocket << bundle.toJSONString();
-    if (compile(lang, work_dir) != COMPILED) {
-        addceinfo(solution_id);
-        string _compile_info, tmp;
-        fstream ceinformation("ce.txt");
-        while (getline(ceinformation, tmp)) {
-            _compile_info += tmp + "\n";
-        }
-        bundle.clear();
-        bundle.setJudger(http_username);
-        bundle.setSolutionID(solution_id);
-        bundle.setResult(COMPILE_ERROR);
-        bundle.setFinished(FINISHED);
-        bundle.setUsedTime(ZERO_TIME);
-        bundle.setMemoryUse(ZERO_MEMORY);
-        bundle.setPassPoint(ZERO_PASSPOINT);
-        bundle.setPassRate(ZERO_PASSRATE);
-        bundle.setCompileInfo(_compile_info);
-        webSocket << bundle.toJSONString();
-        update_solution(solution_id, COMPILE_ERROR, ZERO_TIME, ZERO_MEMORY, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
-        update_user(user_id);
-        update_problem(p_id);
-        //mysql_close(conn);
+    auto gray_function = [&]() -> void {
+        sprintf(work_dir, "%s/run%d/", oj_home, runner_id);
+        string global_work_dir = string(work_dir);
         clean_workdir(work_dir);
-        write_log(oj_home, "compile error");
-        exit(0);
-    } else {
-        update_solution(solution_id, RUNNING_JUDGING, ZERO_TIME, ZERO_MEMORY, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
-        umount(work_dir);
-    }
-    //exit(0);
-    // run
-    char fullpath[BUFFER_SIZE];
-    char infile[BUFFER_SIZE];
-    char outfile[BUFFER_SIZE];
-    char userfile[BUFFER_SIZE];
-    sprintf(fullpath, "%s/data/%d", oj_home, p_id); // the fullpath of data dir
-    int ACflg, PEflg;
-    ACflg = PEflg = ACCEPT;
-    int topmemory = ZERO_MEMORY;
-    double usedtime = ZERO_TIME;
+        if (SHARE_MEMORY_RUN)
+            mk_shm_workdir(work_dir);
 
-    //create chroot for ruby bash python
-    switch (lang) {
-        case RUBY:
-            copy_ruby_runtime(work_dir);
-            break;
-        case BASH:
-            copy_bash_runtime(work_dir);
-            break;
-        case PYTHON2:
-        case PYTHON3:
-            copy_python_runtime(work_dir);
-            break;
-        case PyPy:
-            copy_pypy_runtime(work_dir);
-            break;
-        case PyPy3:
-            copy_pypy3_runtime(work_dir);
-            break;
-        case PHP:
-            copy_php_runtime(work_dir);
-            break;
-        case PERL:
-            copy_perl_runtime(work_dir);
-            break;
-        case CSHARP:
-            copy_mono_runtime(work_dir);
-            break;
-        case OBJC:
-            copy_objc_runtime(work_dir);
-            break;
-        case FREEBASIC:
-            copy_freebasic_runtime(work_dir);
-            break;
-        case SCHEMA:
-            copy_guile_runtime(work_dir);
-            break;
-        case LUA:
-            copy_lua_runtime(work_dir);
-            break;
-        case JAVASCRIPT:
-            copy_js_runtime(work_dir);
-        default:
-            break;
-    }
-    // read files and run
-    double pass_rate = ZERO_PASSRATE;
-    int num_of_test = 0;
-    int finalACflg = ACflg;
-    if (p_id <= TEST_RUN_PROBLEM) {  //custom input running
-        printf("running a custom input...\n");
-        get_custominput(solution_id, work_dir);
-        init_syscalls_limits(lang);
+        chdir(work_dir);
+        get_solution_info(solution_id, p_id, user_id, lang);
+        get_problem_info(abs(p_id), timeLimit, memoryLimit, SPECIAL_JUDGE);
+        //get the limit
+        if (p_id <= TEST_RUN_SUBMIT) {//Is custom input
+            SPECIAL_JUDGE = NONE_SPECIAL_JUDGE;
+        }
+        //copy source file
+        get_solution(solution_id, work_dir, lang, usercode);
+        //java is lucky
+        if (lang != OBJC && !isCOrCPP(lang) && lang != PASCAL) {  // Clang Clang++ not VM or Script
+            // the limit for java
+            timeLimit = timeLimit * javaTimeBonus + javaTimeBonus;
+            memoryLimit = memoryLimit + java_memory_bonus;
+            // copy java.policy
+            if (isJava(lang)) {
+                execute_cmd("/bin/cp %s/etc/java0.policy %s/java.policy", oj_home, work_dir);
+                execute_cmd("chmod 755 %s/java.policy", work_dir);
+                execute_cmd("chown judge %s/java.policy", work_dir);
+            }
+        }
+
+        //never bigger than judged set value;
+        if (timeLimit > 300 * SECOND || timeLimit < ZERO) {
+            timeLimit = 300 * SECOND;
+        }
+        if (memoryLimit > ONE_KILOBYTE || memoryLimit < ONE) {
+            memoryLimit = ONE_KILOBYTE;//ONE_KILOBYTE MB
+        }
+        if (DEBUG) {
+            printf("time: %f mem: %d\n", timeLimit, memoryLimit);
+        }
+
         bundle.clear();
         bundle.setJudger(http_username);
-        bundle.setSolutionID(solution_id);
-        bundle.setResult(RUNNING_JUDGING);
+        bundle.setSolutionId(solution_id);
+        bundle.setResult(COMPILING);
         bundle.setFinished(NOT_FINISHED);
         bundle.setUsedTime(ZERO_TIME);
         bundle.setMemoryUse(ZERO_MEMORY);
         bundle.setPassPoint(ZERO_PASSPOINT);
         bundle.setPassRate(ZERO_PASSRATE);
         webSocket << bundle.toJSONString();
-        //        webSocket << ws_send(solution_id, RUNNING_JUDGING, NOT_FINISHED, ZERO_TIME, ZERO_MEMORY, ZERO_PASSPOINT,
-        //                            ZERO_PASSRATE);
-        pid_t pidApp = fork();
-
-        if (pidApp == CHILD_PROCESS) {
-            run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit);
-        } else {
-            watch_solution(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
-                           solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
-                           p_id, PEflg, work_dir);
-
-        }
-        fix_python_syntax_error_response(ACflg, lang);
-        string error_message;
-        if (ACflg == TIME_LIMIT_EXCEEDED) {
-            usedtime = timeLimit * 1000;
-            error_message = "Time Limit Exceeded.Kill Process.\n";
-            //add_reinfo_mysql_by_string(solution_id, error_message);
-        } else if (ACflg == RUNTIME_ERROR) {
-            if (DEBUG)
-                printf("add RE info of %d..... \n", solution_id);
-            addreinfo(solution_id);
-        } else if (ACflg == MEMORY_LIMIT_EXCEEDED) {
-            error_message = "Memory Limit Exceeded.Kill Process.\n";
-            //add_reinfo_mysql_by_string(solution_id, error_message);
-        }
-        string test_run_out;
-        if (ACflg == ACCEPT) {
-            char reinfo[(1u << 16)];
-            FILE *fp = fopen("user.out", "re");
-            while (fgets(reinfo, 1u << 16, fp)) {
-                string tmp(reinfo);
-                test_run_out += tmp;
-                if (test_run_out.length() > 4096)
-                    break;
+        if (compile(lang, work_dir) != COMPILED) {
+            addceinfo(solution_id);
+            string _compile_info, tmp;
+            fstream ceinformation("ce.txt");
+            while (getline(ceinformation, tmp)) {
+                _compile_info += tmp + "\n";
             }
-            fclose(fp);
-        } else {
-            test_run_out = error_message;
-        }
-
-        if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
-            auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
-            test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
-            test_run_out += "\n......Omit " + omit + " characters.";
-        }
-        if (DEBUG) {
-            cout << "test_run_out:" << endl << test_run_out << endl;
-        }
-
-        if(usedtime == timeLimit * 1000) {
-            test_run_out += "\n测试运行中发生运行超时，程序被强制停止";
-        }
-
-        bundle.clear();
-        bundle.setSolutionID(solution_id);
-        bundle.setResult(TEST_RUN);
-        bundle.setFinished(FINISHED);
-        bundle.setUsedTime(usedtime);
-        bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
-        bundle.setPassPoint(ZERO_PASSPOINT);
-        bundle.setPassRate(ZERO_PASSRATE);
-        bundle.setTestRunResult(test_run_out);
-        webSocket << bundle.toJSONString();
-//        webSocket << ws_send(solution_id, TEST_RUN, FINISHED, usedtime, topmemory / ONE_KILOBYTE, ZERO_PASSPOINT,
-        //                           ZERO_PASSRATE,
-        //                          test_run_out);
-
-        auto fpid = fork();
-        if (fpid == CHILD_PROCESS) {
-            if (!conn.start()) {
-                if (DEBUG) {
-                    cout << "Init mysql connection ERROR in custom input database insert" << endl;
-                }
-            } else {
-                add_reinfo_mysql_by_string(solution_id, test_run_out);
-                //mysql_close(conn);
-            }
+            bundle.clear();
+            bundle.setJudger(http_username);
+            bundle.setSolutionId(solution_id);
+            bundle.setResult(COMPILE_ERROR);
+            bundle.setFinished(FINISHED);
+            bundle.setUsedTime(ZERO_TIME);
+            bundle.setMemoryUse(ZERO_MEMORY);
+            bundle.setPassPoint(ZERO_PASSPOINT);
+            bundle.setPassRate(ZERO_PASSRATE);
+            bundle.setCompileInfo(_compile_info);
+            webSocket << bundle.toJSONString();
+            update_solution(solution_id, COMPILE_ERROR, ZERO_TIME, ZERO_MEMORY, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
+            update_user(user_id);
+            update_problem(p_id);
+            //mysql_close(conn);
+            clean_workdir(work_dir);
+            write_log(oj_home, "compile error");
             exit(0);
+        } else {
+            update_solution(solution_id, RUNNING_JUDGING, ZERO_TIME, ZERO_MEMORY, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
+            umount(work_dir);
         }
+        //exit(0);
+        // run
+        char fullpath[BUFFER_SIZE];
+        char infile[BUFFER_SIZE];
+        char outfile[BUFFER_SIZE];
+        char userfile[BUFFER_SIZE];
+        sprintf(fullpath, "%s/data/%d", oj_home, p_id); // the fullpath of data dir
+        int ACflg, PEflg;
+        ACflg = PEflg = ACCEPT;
+        int topmemory = ZERO_MEMORY;
+        double usedtime = ZERO_TIME;
 
-        update_solution(solution_id, TEST_RUN, usedtime, topmemory / ONE_KILOBYTE, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
-        clean_workdir(work_dir);
-        //mysql_close(conn);
-        exit(0);
-    }
-    int total_point = 0;
-    int pass_point = ZERO_PASSPOINT;
-    vector<pair<string, int> >inFileList = getFileList(fullpath, isInFile);
-    total_point = inFileList.size();
-    //dp = opendir(fullpath);
-    bundle.clear();
-    bundle.setJudger(http_username);
-    bundle.setSolutionID(solution_id);
-    bundle.setResult(RUNNING_JUDGING);
-    bundle.setFinished(NOT_FINISHED);
-    bundle.setUsedTime(ZERO_TIME);
-    bundle.setMemoryUse(ZERO_MEMORY);
-    bundle.setPassPoint(ZERO_PASSPOINT);
-    bundle.setPassRate(ZERO_PASSRATE);
-    bundle.setTotalPoint(total_point);
-    webSocket << bundle.toJSONString();
-    //webSocket << ws_send(solution_id, RUNNING_JUDGING, NOT_FINISHED, ZERO_TIME, ZERO_MEMORY, ZERO_PASSPOINT,
-    //                     ZERO_PASSRATE);
-
-
-    for (auto& infilePair: inFileList) {
-        if(!(ALL_TEST_MODE || ACflg == ACCEPT || ACflg == PRESENTATION_ERROR) && ACflg != TIME_LIMIT_EXCEEDED) {
-            break;
+        //create chroot for ruby bash python
+        switch (lang) {
+            case RUBY:
+                copy_ruby_runtime(work_dir);
+                break;
+            case BASH:
+                copy_bash_runtime(work_dir);
+                break;
+            case PYTHON2:
+            case PYTHON3:
+                copy_python_runtime(work_dir);
+                break;
+            case PyPy:
+                copy_pypy_runtime(work_dir);
+                break;
+            case PyPy3:
+                copy_pypy3_runtime(work_dir);
+                break;
+            case PHP:
+                copy_php_runtime(work_dir);
+                break;
+            case PERL:
+                copy_perl_runtime(work_dir);
+                break;
+            case CSHARP:
+                copy_mono_runtime(work_dir);
+                break;
+            case OBJC:
+                copy_objc_runtime(work_dir);
+                break;
+            case FREEBASIC:
+                copy_freebasic_runtime(work_dir);
+                break;
+            case SCHEMA:
+                copy_guile_runtime(work_dir);
+                break;
+            case LUA:
+                copy_lua_runtime(work_dir);
+                break;
+            case JAVASCRIPT:
+                copy_js_runtime(work_dir);
+            default:
+                break;
         }
-        if(ACflg == RUNTIME_ERROR) {
-            break;
-        }
-
-        if (ACflg <= PRESENTATION_ERROR) {
-            ++num_of_test;
-            prepare_files(infilePair.first.c_str(), infilePair.second, infile, p_id, work_dir, outfile,
-                          userfile, runner_id);
+        // read files and run
+        double pass_rate = ZERO_PASSRATE;
+        int num_of_test = 0;
+        int finalACflg = ACflg;
+        if (p_id <= TEST_RUN_PROBLEM) {  //custom input running
+            printf("running a custom input...\n");
+            get_custominput(solution_id, work_dir);
             init_syscalls_limits(lang);
-
+            bundle.clear();
+            bundle.setJudger(http_username);
+            bundle.setSolutionId(solution_id);
+            bundle.setResult(RUNNING_JUDGING);
+            bundle.setFinished(NOT_FINISHED);
+            bundle.setUsedTime(ZERO_TIME);
+            bundle.setMemoryUse(ZERO_MEMORY);
+            bundle.setPassPoint(ZERO_PASSPOINT);
+            bundle.setPassRate(ZERO_PASSRATE);
+            webSocket << bundle.toJSONString();
+            //        webSocket << ws_send(solution_id, RUNNING_JUDGING, NOT_FINISHED, ZERO_TIME, ZERO_MEMORY, ZERO_PASSPOINT,
+            //                            ZERO_PASSRATE);
             pid_t pidApp = fork();
 
             if (pidApp == CHILD_PROCESS) {
-                if (DEBUG) {
-                    printf("Running solution\n");
-                    cout << "Time limit ALL_TEST_MODE:" << (timeLimit + 1) << endl;
-                    cout << "Time limit NORMAL:" << ((timeLimit - usedtime / 1000) + 1) << endl;
-                }
                 run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit);
             } else {
-
-                if (DEBUG) {
-                    cout << "Run test point:" << num_of_test << endl;
-                }
                 watch_solution(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
                                solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
                                p_id, PEflg, work_dir);
-                judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, p_id, infile,
-                               outfile, userfile, usercode, PEflg, lang, work_dir, topmemory,
-                               memoryLimit, solution_id, num_of_test, global_work_dir);
-                if (use_max_time) {
-                    max_case_time = max(usedtime, max_case_time);
-                    usedtime = ZERO_TIME;
-                }
-                //clean_session(pidApp);
-            }
 
-            if (usedtime > timeLimit * 1000 || ACflg == TIME_LIMIT_EXCEEDED) {
-                cout << "Time Limit Exceeded" << endl;
-                ACflg = TIME_LIMIT_EXCEEDED;
+            }
+            fix_python_syntax_error_response(ACflg, lang);
+            string error_message;
+            if (ACflg == TIME_LIMIT_EXCEEDED) {
                 usedtime = timeLimit * 1000;
+                error_message = "Time Limit Exceeded.Kill Process.\n";
+                //add_reinfo_mysql_by_string(solution_id, error_message);
+            } else if (ACflg == RUNTIME_ERROR) {
+                if (DEBUG)
+                    printf("add RE info of %d..... \n", solution_id);
+                addreinfo(solution_id);
+            } else if (ACflg == MEMORY_LIMIT_EXCEEDED) {
+                error_message = "Memory Limit Exceeded.Kill Process.\n";
+                //add_reinfo_mysql_by_string(solution_id, error_message);
             }
-
+            string test_run_out;
             if (ACflg == ACCEPT) {
-                ++pass_point;
+                char reinfo[(1u << 16)];
+                FILE *fp = fopen("user.out", "re");
+                while (fgets(reinfo, 1u << 13, fp)) {
+                    string tmp(reinfo);
+                    test_run_out += tmp;
+                    if (test_run_out.length() > 4096)
+                        break;
+                }
+                fclose(fp);
+            } else {
+                test_run_out = error_message;
             }
 
-            if (ALL_TEST_MODE) {
-                if (ACflg == ACCEPT) {
-                    ++pass_rate;
-                }
-                if (finalACflg < ACflg) {
-                    finalACflg = ACflg;
-                }
-
-                ACflg = ACCEPT;
+            if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
+                auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
+                test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
+                test_run_out += "\n......Omit " + omit + " characters.";
             }
-        }
-        bundle.setUsedTime(min(usedtime, timeLimit * 1000));
-        bundle.setMemoryUse(min(topmemory / ONE_KILOBYTE, memoryLimit * STD_MB / ONE_KILOBYTE));
-        bundle.setPassPoint(pass_point);
-        bundle.setPassRate(pass_rate / num_of_test);
-        webSocket << bundle.toJSONString();
-    }
-    if (ACflg == ACCEPT && PEflg == PRESENTATION_ERROR)
-        ACflg = PRESENTATION_ERROR;
-    if (sim_enable && ACflg == ACCEPT && (!ALL_TEST_MODE || finalACflg == ACCEPT)
-        && (lang < BASH || isCOrCPP(lang) || lang >= CPP11)) { //bash don't supported
-        sim = get_sim(solution_id, lang, p_id, sim_s_id);
-    } else {
-        sim = ZERO_SIM;
-    }
-    //if(ACflg == OJ_RE)addreinfo(solution_id);
+            if (DEBUG) {
+                cout << "test_run_out:" << endl << test_run_out << endl;
+            }
 
-    if ((ALL_TEST_MODE && finalACflg == RUNTIME_ERROR) || ACflg == RUNTIME_ERROR) {
-        if (DEBUG)
-            printf("add RE info of %d..... \n", solution_id);
-        auto pid = fork();
-        if (pid == CHILD_PROCESS) {
-            conn.start();
-            addreinfo(solution_id);
+            if(usedtime == timeLimit * 1000) {
+                test_run_out += "\n测试运行中发生运行超时，程序被强制停止";
+            }
+
+            bundle.clear();
+            bundle.setSolutionId(solution_id);
+            bundle.setResult(TEST_RUN);
+            bundle.setFinished(FINISHED);
+            bundle.setUsedTime(usedtime);
+            bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
+            bundle.setPassPoint(ZERO_PASSPOINT);
+            bundle.setPassRate(ZERO_PASSRATE);
+            bundle.setTestRunResult(test_run_out);
+            webSocket << bundle.toJSONString();
+//        webSocket << ws_send(solution_id, TEST_RUN, FINISHED, usedtime, topmemory / ONE_KILOBYTE, ZERO_PASSPOINT,
+            //                           ZERO_PASSRATE,
+            //                          test_run_out);
+
+//            auto fpid = fork();
+//            if (fpid == CHILD_PROCESS) {
+//                if (!conn.start()) {
+//                    if (DEBUG) {
+//                        cout << "Init mysql connection ERROR in custom input database insert" << endl;
+//                    }
+//                } else {
+                    add_reinfo_mysql_by_string(solution_id, test_run_out);
+                    //mysql_close(conn);
+//                }
+//                exit(0);
+//            }
+
+            update_solution(solution_id, TEST_RUN, usedtime, topmemory / ONE_KILOBYTE, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
+            clean_workdir(work_dir);
+            //mysql_close(conn);
             exit(0);
         }
-    }
-    if (use_max_time) {
-        usedtime = max_case_time;
-    }
+        int total_point = 0;
+        int pass_point = ZERO_PASSPOINT;
+        vector<pair<string, int> >inFileList = getFileList(fullpath, isInFile);
+        total_point = inFileList.size();
+        //dp = opendir(fullpath);
+        bundle.clear();
+        bundle.setJudger(http_username);
+        bundle.setSolutionId(solution_id);
+        bundle.setResult(RUNNING_JUDGING);
+        bundle.setFinished(NOT_FINISHED);
+        bundle.setUsedTime(ZERO_TIME);
+        bundle.setMemoryUse(ZERO_MEMORY);
+        bundle.setPassPoint(ZERO_PASSPOINT);
+        bundle.setPassRate(ZERO_PASSRATE);
+        bundle.setTotalPoint(total_point);
+        webSocket << bundle.toJSONString();
+        //webSocket << ws_send(solution_id, RUNNING_JUDGING, NOT_FINISHED, ZERO_TIME, ZERO_MEMORY, ZERO_PASSPOINT,
+        //                     ZERO_PASSRATE);
 
-    if (ACflg == TIME_LIMIT_EXCEEDED || (ALL_TEST_MODE && finalACflg == TIME_LIMIT_EXCEEDED)) {
-        usedtime = timeLimit * 1000;
-    }
-    bundle.setResult(ALL_TEST_MODE ? finalACflg : ACflg);
-    bundle.setFinished(FINISHED);
-    bundle.setUsedTime(usedtime);
-    bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
-    bundle.setPassPoint(pass_point);
-    bundle.setPassRate(pass_rate / num_of_test);
-    bundle.setSim(sim);
-    bundle.setSimSource(sim_s_id);
-    webSocket << bundle.toJSONString();
-    string sql = "UPDATE solution set pass_point=" + to_string(pass_point) + " WHERE solution_id=" +
-                 to_string(solution_id);
-    conn.query(conn, sql, sql.length());
 
-    if (ALL_TEST_MODE) {
-        if (num_of_test > 0) {
-            pass_rate /= num_of_test;
+        for (auto& infilePair: inFileList) {
+            if(!(ALL_TEST_MODE || ACflg == ACCEPT || ACflg == PRESENTATION_ERROR) && ACflg != TIME_LIMIT_EXCEEDED) {
+                break;
+            }
+            if(ACflg == RUNTIME_ERROR) {
+                break;
+            }
+
+            if (ACflg <= PRESENTATION_ERROR) {
+                ++num_of_test;
+                prepare_files(infilePair.first.c_str(), infilePair.second, infile, p_id, work_dir, outfile,
+                              userfile, runner_id);
+                init_syscalls_limits(lang);
+
+                pid_t pidApp = fork();
+
+                if (pidApp == CHILD_PROCESS) {
+                    if (DEBUG) {
+                        printf("Running solution\n");
+                        cout << "Time limit ALL_TEST_MODE:" << (timeLimit + 1) << endl;
+                        cout << "Time limit NORMAL:" << ((timeLimit - usedtime / 1000) + 1) << endl;
+                    }
+                    run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit);
+                } else {
+
+                    if (DEBUG) {
+                        cout << "Run test point:" << num_of_test << endl;
+                    }
+                    watch_solution(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
+                                   solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
+                                   p_id, PEflg, work_dir);
+                    judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, p_id, infile,
+                                   outfile, userfile, usercode, PEflg, lang, work_dir, topmemory,
+                                   memoryLimit, solution_id, num_of_test, global_work_dir);
+                    if (use_max_time) {
+                        max_case_time = max(usedtime, max_case_time);
+                        usedtime = ZERO_TIME;
+                    }
+                    //clean_session(pidApp);
+                }
+
+                if (usedtime > timeLimit * 1000 || ACflg == TIME_LIMIT_EXCEEDED) {
+                    cout << "Time Limit Exceeded" << endl;
+                    ACflg = TIME_LIMIT_EXCEEDED;
+                    usedtime = timeLimit * 1000;
+                }
+
+                if (ACflg == ACCEPT) {
+                    ++pass_point;
+                }
+
+                if (ALL_TEST_MODE) {
+                    if (ACflg == ACCEPT) {
+                        ++pass_rate;
+                    }
+                    if (finalACflg < ACflg) {
+                        finalACflg = ACflg;
+                    }
+
+                    ACflg = ACCEPT;
+                }
+            }
+            bundle.setUsedTime(min(usedtime, timeLimit * 1000));
+            bundle.setMemoryUse(min(topmemory / ONE_KILOBYTE, memoryLimit * STD_MB / ONE_KILOBYTE));
+            bundle.setPassPoint(pass_point);
+            bundle.setPassRate(pass_rate / num_of_test);
+            webSocket << bundle.toJSONString();
+        }
+        if (ACflg == ACCEPT && PEflg == PRESENTATION_ERROR)
+            ACflg = PRESENTATION_ERROR;
+        if (sim_enable && ACflg == ACCEPT && (!ALL_TEST_MODE || finalACflg == ACCEPT)
+            && (lang < BASH || isCOrCPP(lang) || lang >= CPP11)) { //bash don't supported
+            sim = get_sim(solution_id, lang, p_id, sim_s_id);
+        } else {
+            sim = ZERO_SIM;
+        }
+        //if(ACflg == OJ_RE)addreinfo(solution_id);
+
+        if ((ALL_TEST_MODE && finalACflg == RUNTIME_ERROR) || ACflg == RUNTIME_ERROR) {
+            if (DEBUG)
+                printf("add RE info of %d..... \n", solution_id);
+            auto pid = fork();
+            if (pid == CHILD_PROCESS) {
+                conn.start();
+                addreinfo(solution_id);
+                exit(0);
+            }
+        }
+        if (use_max_time) {
+            usedtime = max_case_time;
+        }
+
+        if (ACflg == TIME_LIMIT_EXCEEDED || (ALL_TEST_MODE && finalACflg == TIME_LIMIT_EXCEEDED)) {
+            usedtime = timeLimit * 1000;
+        }
+        bundle.setResult(ALL_TEST_MODE ? finalACflg : ACflg);
+        bundle.setFinished(FINISHED);
+        bundle.setUsedTime(usedtime);
+        bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
+        bundle.setPassPoint(pass_point);
+        bundle.setPassRate(pass_rate / num_of_test);
+        bundle.setSim(sim);
+        bundle.setSimSource(sim_s_id);
+        webSocket << bundle.toJSONString();
+        string sql = "UPDATE solution set pass_point=" + to_string(pass_point) + " WHERE solution_id=" +
+                     to_string(solution_id);
+        conn.query(conn, sql, sql.length());
+
+        if (ALL_TEST_MODE) {
+            if (num_of_test > 0) {
+                pass_rate /= num_of_test;
+            }
+            if (DEBUG) {
+                cout << "Write Usedtime: " << usedtime << endl;
+            }
+            update_solution(solution_id, finalACflg, usedtime, topmemory / ONE_KILOBYTE, sim,
+                            sim_s_id, pass_rate);
+        } else {
+            update_solution(solution_id, ACflg, usedtime, topmemory / ONE_KILOBYTE, sim,
+                            sim_s_id, ZERO_PASSRATE);
+        }
+        if ((ALL_TEST_MODE && (SPECIAL_JUDGE || finalACflg == WRONG_ANSWER || finalACflg == PRESENTATION_ERROR)) ||
+            (ACflg == WRONG_ANSWER || ACflg == PRESENTATION_ERROR)) {
+            if (DEBUG)
+                printf("add diff info of %d..... \n", solution_id);
+            // if (!SPECIAL_JUDGE)
+            adddiffinfo(solution_id);
+        }
+        update_user(user_id);
+        update_problem(p_id);
+        clean_workdir(work_dir);
+
+        if (DEBUG)
+            write_log(oj_home, "result=%d", ALL_TEST_MODE ? finalACflg : ACflg);
+        //mysql_close(conn);
+        if (record_call) {
+            print_call_array();
+        }
+    };
+    auto gray_no_mysql_func = [&](string& response) -> void {
+        JSONVectorReader reader;
+        reader.loadJSON(response);
+        p_id = reader.GetInt("problem_id");
+        lang = reader.GetInt("language");
+        timeLimit = reader.GetDouble("time_limit");
+        memoryLimit = reader.GetInt("memory_limit");
+        SPECIAL_JUDGE = reader.GetInt("spj");
+        reader.GetCharString("source", usercode);
+        sprintf(work_dir, "%s/run%d/", oj_home, runner_id);
+        string global_work_dir = string(work_dir);
+        clean_workdir(work_dir);
+        if (SHARE_MEMORY_RUN)
+            mk_shm_workdir(work_dir);
+
+        chdir(work_dir);
+        //get the limit
+        if (p_id <= TEST_RUN_SUBMIT) {//Is custom input
+            SPECIAL_JUDGE = NONE_SPECIAL_JUDGE;
+        }
+        //java is lucky
+        if (lang != OBJC && !isCOrCPP(lang) && lang != PASCAL) {  // Clang Clang++ not VM or Script
+            // the limit for java
+            timeLimit = timeLimit * javaTimeBonus + javaTimeBonus;
+            memoryLimit = memoryLimit + java_memory_bonus;
+            // copy java.policy
+            if (isJava(lang)) {
+                execute_cmd("/bin/cp %s/etc/java0.policy %s/java.policy", oj_home, work_dir);
+                execute_cmd("chmod 755 %s/java.policy", work_dir);
+                execute_cmd("chown judge %s/java.policy", work_dir);
+            }
+        }
+
+        //never bigger than judged set value;
+        if (timeLimit > 300 * SECOND || timeLimit < ZERO) {
+            timeLimit = 300 * SECOND;
+        }
+        if (memoryLimit > ONE_KILOBYTE || memoryLimit < ONE) {
+            memoryLimit = ONE_KILOBYTE;//ONE_KILOBYTE MB
         }
         if (DEBUG) {
-            cout << "Write Usedtime: " << usedtime << endl;
+            printf("time: %f mem: %d\n", timeLimit, memoryLimit);
         }
-        update_solution(solution_id, finalACflg, usedtime, topmemory / ONE_KILOBYTE, sim,
-                        sim_s_id, pass_rate);
-    } else {
-        update_solution(solution_id, ACflg, usedtime, topmemory / ONE_KILOBYTE, sim,
-                        sim_s_id, ZERO_PASSRATE);
-    }
-    if ((ALL_TEST_MODE && (SPECIAL_JUDGE || finalACflg == WRONG_ANSWER || finalACflg == PRESENTATION_ERROR)) ||
-        (ACflg == WRONG_ANSWER || ACflg == PRESENTATION_ERROR)) {
-        if (DEBUG)
-            printf("add diff info of %d..... \n", solution_id);
-        // if (!SPECIAL_JUDGE)
-        adddiffinfo(solution_id);
-    }
-    update_user(user_id);
-    update_problem(p_id);
-    clean_workdir(work_dir);
 
-    if (DEBUG)
-        write_log(oj_home, "result=%d", ALL_TEST_MODE ? finalACflg : ACflg);
-    //mysql_close(conn);
-    if (record_call) {
-        print_call_array();
+        bundle.clear();
+        bundle.setJudger(http_username);
+        bundle.setSolutionId(solution_id);
+        bundle.setResult(COMPILING);
+        bundle.setFinished(NOT_FINISHED);
+        bundle.setUsedTime(ZERO_TIME);
+        bundle.setMemoryUse(ZERO_MEMORY);
+        bundle.setPassPoint(ZERO_PASSPOINT);
+        bundle.setPassRate(ZERO_PASSRATE);
+        webSocket << bundle.toJSONString();
+        if (compile(lang, work_dir) != COMPILED) {
+//            addceinfo(solution_id);
+            string _compile_info, tmp;
+            fstream ceinformation("ce.txt");
+            while (getline(ceinformation, tmp)) {
+                _compile_info += tmp + "\n";
+            }
+            bundle.clear();
+            bundle.setJudger(http_username);
+            bundle.setSolutionId(solution_id);
+            bundle.setResult(COMPILE_ERROR);
+            bundle.setFinished(FINISHED);
+            bundle.setUsedTime(ZERO_TIME);
+            bundle.setMemoryUse(ZERO_MEMORY);
+            bundle.setPassPoint(ZERO_PASSPOINT);
+            bundle.setPassRate(ZERO_PASSRATE);
+            bundle.setCompileInfo(_compile_info);
+            webSocket << bundle.toJSONString();
+//            update_solution(solution_id, COMPILE_ERROR, ZERO_TIME, ZERO_MEMORY, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
+//            update_user(user_id);
+//            update_problem(p_id);
+            //mysql_close(conn);
+            clean_workdir(work_dir);
+            write_log(oj_home, "compile error");
+            exit(0);
+        } else {
+//            update_solution(solution_id, RUNNING_JUDGING, ZERO_TIME, ZERO_MEMORY, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
+            umount(work_dir);
+        }
+        //exit(0);
+        // run
+        char fullpath[BUFFER_SIZE];
+        char infile[BUFFER_SIZE];
+        char outfile[BUFFER_SIZE];
+        char userfile[BUFFER_SIZE];
+        sprintf(fullpath, "%s/data/%d", oj_home, p_id); // the fullpath of data dir
+        int ACflg, PEflg;
+        ACflg = PEflg = ACCEPT;
+        int topmemory = ZERO_MEMORY;
+        double usedtime = ZERO_TIME;
+
+        //create chroot for ruby bash python
+        switch (lang) {
+            case RUBY:
+                copy_ruby_runtime(work_dir);
+                break;
+            case BASH:
+                copy_bash_runtime(work_dir);
+                break;
+            case PYTHON2:
+            case PYTHON3:
+                copy_python_runtime(work_dir);
+                break;
+            case PyPy:
+                copy_pypy_runtime(work_dir);
+                break;
+            case PyPy3:
+                copy_pypy3_runtime(work_dir);
+                break;
+            case PHP:
+                copy_php_runtime(work_dir);
+                break;
+            case PERL:
+                copy_perl_runtime(work_dir);
+                break;
+            case CSHARP:
+                copy_mono_runtime(work_dir);
+                break;
+            case OBJC:
+                copy_objc_runtime(work_dir);
+                break;
+            case FREEBASIC:
+                copy_freebasic_runtime(work_dir);
+                break;
+            case SCHEMA:
+                copy_guile_runtime(work_dir);
+                break;
+            case LUA:
+                copy_lua_runtime(work_dir);
+                break;
+            case JAVASCRIPT:
+                copy_js_runtime(work_dir);
+            default:
+                break;
+        }
+        // read files and run
+        double pass_rate = ZERO_PASSRATE;
+        int num_of_test = 0;
+        int finalACflg = ACflg;
+        if (p_id <= TEST_RUN_PROBLEM) {  //custom input running
+            printf("running a custom input...\n");
+            string custom_input = reader.GetString("custom_input");
+            write_custominput(custom_input);
+//            get_custominput(solution_id, work_dir);
+            init_syscalls_limits(lang);
+            bundle.clear();
+            bundle.setJudger(http_username);
+            bundle.setSolutionId(solution_id);
+            bundle.setResult(RUNNING_JUDGING);
+            bundle.setFinished(NOT_FINISHED);
+            bundle.setUsedTime(ZERO_TIME);
+            bundle.setMemoryUse(ZERO_MEMORY);
+            bundle.setPassPoint(ZERO_PASSPOINT);
+            bundle.setPassRate(ZERO_PASSRATE);
+            webSocket << bundle.toJSONString();
+            //        webSocket << ws_send(solution_id, RUNNING_JUDGING, NOT_FINISHED, ZERO_TIME, ZERO_MEMORY, ZERO_PASSPOINT,
+            //                            ZERO_PASSRATE);
+            pid_t pidApp = fork();
+
+            if (pidApp == CHILD_PROCESS) {
+                run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit);
+            } else {
+                watch_solution(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
+                               solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
+                               p_id, PEflg, work_dir);
+
+            }
+            fix_python_syntax_error_response(ACflg, lang);
+            string error_message;
+            if (ACflg == TIME_LIMIT_EXCEEDED) {
+                usedtime = timeLimit * 1000;
+                error_message = "Time Limit Exceeded.Kill Process.\n";
+                //add_reinfo_mysql_by_string(solution_id, error_message);
+            } else if (ACflg == RUNTIME_ERROR) {
+                if (DEBUG)
+                    printf("add RE info of %d..... \n", solution_id);
+//                addreinfo(solution_id);
+            } else if (ACflg == MEMORY_LIMIT_EXCEEDED) {
+                error_message = "Memory Limit Exceeded.Kill Process.\n";
+                //add_reinfo_mysql_by_string(solution_id, error_message);
+            }
+            string test_run_out;
+            if (ACflg == ACCEPT) {
+                char reinfo[(1u << 16)];
+                FILE *fp = fopen("user.out", "re");
+                while (fgets(reinfo, 1u << 13, fp)) {
+                    string tmp(reinfo);
+                    test_run_out += tmp;
+                    if (test_run_out.length() > 4096)
+                        break;
+                }
+                fclose(fp);
+            } else {
+                test_run_out = error_message;
+            }
+
+            if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
+                auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
+                test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
+                test_run_out += "\n......Omit " + omit + " characters.";
+            }
+            if (DEBUG) {
+                cout << "test_run_out:" << endl << test_run_out << endl;
+            }
+
+            if(usedtime == timeLimit * 1000) {
+                test_run_out += "\n测试运行中发生运行超时，程序被强制停止";
+            }
+
+            bundle.clear();
+            bundle.setSolutionId(solution_id);
+            bundle.setResult(TEST_RUN);
+            bundle.setFinished(FINISHED);
+            bundle.setUsedTime(usedtime);
+            bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
+            bundle.setPassPoint(ZERO_PASSPOINT);
+            bundle.setPassRate(ZERO_PASSRATE);
+            bundle.setTestRunResult(test_run_out);
+            webSocket << bundle.toJSONString();
+//        webSocket << ws_send(solution_id, TEST_RUN, FINISHED, usedtime, topmemory / ONE_KILOBYTE, ZERO_PASSPOINT,
+            //                           ZERO_PASSRATE,
+            //                          test_run_out);
+
+//            auto fpid = fork();
+//            if (fpid == CHILD_PROCESS) {
+//                if (!conn.start()) {
+//                    if (DEBUG) {
+//                        cout << "Init mysql connection ERROR in custom input database insert" << endl;
+//                    }
+//                } else {
+//            add_reinfo_mysql_by_string(solution_id, test_run_out);
+            //mysql_close(conn);
+//                }
+//                exit(0);
+//            }
+
+//            update_solution(solution_id, TEST_RUN, usedtime, topmemory / ONE_KILOBYTE, ZERO_SIM, ZERO_SIM, ZERO_PASSRATE);
+            clean_workdir(work_dir);
+            //mysql_close(conn);
+            exit(0);
+        }
+        int total_point = 0;
+        int pass_point = ZERO_PASSPOINT;
+        vector<pair<string, int> >inFileList = getFileList(fullpath, isInFile);
+        total_point = inFileList.size();
+        //dp = opendir(fullpath);
+        bundle.clear();
+        bundle.setJudger(http_username);
+        bundle.setSolutionId(solution_id);
+        bundle.setResult(RUNNING_JUDGING);
+        bundle.setFinished(NOT_FINISHED);
+        bundle.setUsedTime(ZERO_TIME);
+        bundle.setMemoryUse(ZERO_MEMORY);
+        bundle.setPassPoint(ZERO_PASSPOINT);
+        bundle.setPassRate(ZERO_PASSRATE);
+        bundle.setTotalPoint(total_point);
+        webSocket << bundle.toJSONString();
+        //webSocket << ws_send(solution_id, RUNNING_JUDGING, NOT_FINISHED, ZERO_TIME, ZERO_MEMORY, ZERO_PASSPOINT,
+        //                     ZERO_PASSRATE);
+
+
+        for (auto& infilePair: inFileList) {
+            if(!(ALL_TEST_MODE || ACflg == ACCEPT || ACflg == PRESENTATION_ERROR) && ACflg != TIME_LIMIT_EXCEEDED) {
+                break;
+            }
+            if(ACflg == RUNTIME_ERROR) {
+                break;
+            }
+
+            if (ACflg <= PRESENTATION_ERROR) {
+                ++num_of_test;
+                prepare_files(infilePair.first.c_str(), infilePair.second, infile, p_id, work_dir, outfile,
+                              userfile, runner_id);
+                init_syscalls_limits(lang);
+
+                pid_t pidApp = fork();
+
+                if (pidApp == CHILD_PROCESS) {
+                    if (DEBUG) {
+                        printf("Running solution\n");
+                        cout << "Time limit ALL_TEST_MODE:" << (timeLimit + 1) << endl;
+                        cout << "Time limit NORMAL:" << ((timeLimit - usedtime / 1000) + 1) << endl;
+                    }
+                    run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit);
+                } else {
+
+                    if (DEBUG) {
+                        cout << "Run test point:" << num_of_test << endl;
+                    }
+                    watch_solution(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
+                                   solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
+                                   p_id, PEflg, work_dir);
+                    judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, p_id, infile,
+                                   outfile, userfile, usercode, PEflg, lang, work_dir, topmemory,
+                                   memoryLimit, solution_id, num_of_test, global_work_dir);
+                    if (use_max_time) {
+                        max_case_time = max(usedtime, max_case_time);
+                        usedtime = ZERO_TIME;
+                    }
+                    //clean_session(pidApp);
+                }
+
+                if (usedtime > timeLimit * 1000 || ACflg == TIME_LIMIT_EXCEEDED) {
+                    cout << "Time Limit Exceeded" << endl;
+                    ACflg = TIME_LIMIT_EXCEEDED;
+                    usedtime = timeLimit * 1000;
+                }
+
+                if (ACflg == ACCEPT) {
+                    ++pass_point;
+                }
+
+                if (ALL_TEST_MODE) {
+                    if (ACflg == ACCEPT) {
+                        ++pass_rate;
+                    }
+                    if (finalACflg < ACflg) {
+                        finalACflg = ACflg;
+                    }
+
+                    ACflg = ACCEPT;
+                }
+            }
+            bundle.setUsedTime(min(usedtime, timeLimit * 1000));
+            bundle.setMemoryUse(min(topmemory / ONE_KILOBYTE, memoryLimit * STD_MB / ONE_KILOBYTE));
+            bundle.setPassPoint(pass_point);
+            bundle.setPassRate(pass_rate / num_of_test);
+            webSocket << bundle.toJSONString();
+        }
+        if (ACflg == ACCEPT && PEflg == PRESENTATION_ERROR)
+            ACflg = PRESENTATION_ERROR;
+        if (sim_enable && ACflg == ACCEPT && (!ALL_TEST_MODE || finalACflg == ACCEPT)
+            && (lang < BASH || isCOrCPP(lang) || lang >= CPP11)) { //bash don't supported
+            sim = get_sim(solution_id, lang, p_id, sim_s_id);
+        } else {
+            sim = ZERO_SIM;
+        }
+        //if(ACflg == OJ_RE)addreinfo(solution_id);
+
+        if ((ALL_TEST_MODE && finalACflg == RUNTIME_ERROR) || ACflg == RUNTIME_ERROR) {
+            if (DEBUG)
+                printf("add RE info of %d..... \n", solution_id);
+            auto pid = fork();
+            if (pid == CHILD_PROCESS) {
+                conn.start();
+                addreinfo(solution_id);
+                exit(0);
+            }
+        }
+        if (use_max_time) {
+            usedtime = max_case_time;
+        }
+
+        if (ACflg == TIME_LIMIT_EXCEEDED || (ALL_TEST_MODE && finalACflg == TIME_LIMIT_EXCEEDED)) {
+            usedtime = timeLimit * 1000;
+        }
+        bundle.setResult(ALL_TEST_MODE ? finalACflg : ACflg);
+        bundle.setFinished(FINISHED);
+        bundle.setUsedTime(usedtime);
+        bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
+        bundle.setPassPoint(pass_point);
+        bundle.setPassRate(pass_rate / num_of_test);
+        bundle.setSim(sim);
+        bundle.setSimSource(sim_s_id);
+        webSocket << bundle.toJSONString();
+        /*
+        string sql = "UPDATE solution set pass_point=" + to_string(pass_point) + " WHERE solution_id=" +
+                     to_string(solution_id);
+        conn.query(conn, sql, sql.length());
+         */
+
+        if (ALL_TEST_MODE) {
+            if (num_of_test > 0) {
+                pass_rate /= num_of_test;
+            }
+            if (DEBUG) {
+                cout << "Write Usedtime: " << usedtime << endl;
+            }
+//            update_solution(solution_id, finalACflg, usedtime, topmemory / ONE_KILOBYTE, sim,
+//                            sim_s_id, pass_rate);
+        } else {
+//            update_solution(solution_id, ACflg, usedtime, topmemory / ONE_KILOBYTE, sim,
+//                            sim_s_id, ZERO_PASSRATE);
+        }
+        if ((ALL_TEST_MODE && (SPECIAL_JUDGE || finalACflg == WRONG_ANSWER || finalACflg == PRESENTATION_ERROR)) ||
+            (ACflg == WRONG_ANSWER || ACflg == PRESENTATION_ERROR)) {
+            if (DEBUG)
+                printf("add diff info of %d..... \n", solution_id);
+            // if (!SPECIAL_JUDGE)
+//            adddiffinfo(solution_id);
+        }
+//        update_user(user_id);
+//        update_problem(p_id);
+        clean_workdir(work_dir);
+
+        if (DEBUG)
+            write_log(oj_home, "result=%d", ALL_TEST_MODE ? finalACflg : ACflg);
+        //mysql_close(conn);
+        if (record_call) {
+            print_call_array();
+        }
+    };
+    init_parameters(argc, argv, solution_id, runner_id);
+    init_mysql_conf();
+    initWebSocketConnection("localhost", 5100);
+    if (MYSQL_MODE) {
+        if (!conn.start()) {
+            cerr << "Failed to create a MYSQL connection." << endl;
+            exit(0); //exit if mysql is down
+        }
+        gray_function();
     }
+    else {
+        if (!conn.start()) {
+            cerr << "Failed to create a MYSQL connection." << endl;
+            exit(0); //exit if mysql is down
+        }
+        volatile bool finished = false;
+        threadPool.enqueue([&finished]{
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+            if (!finished) {
+                exit(0);
+            }
+        });
+        string response = webSocket.getMessageSync();
+        finished = true;
+        gray_no_mysql_func(response);
+    }
+    //set work directory to start running & judging
+
     return 0;
 }

@@ -8,20 +8,22 @@
 #include <string>
 #include <algorithm>
 #include <unordered_map>
+
 #include "Pack.h"
+#include "BaseBundle.h"
 
 using std::unordered_map;
 using std::string;
 using std::to_string;
 
 
-class Bundle {
+class Bundle: public BaseBundle{
 public:
     Bundle();
 
     ~Bundle() = default;
 
-    bool setSolutionID(int);
+    Bundle& setSolutionId(int);
 
     bool setResult(int);
 
@@ -49,28 +51,12 @@ public:
 
     bool setTotalPoint(int);
 
-    void clear();
-
     string toJSONString();
 
     operator string();
 
 private:
-    unordered_map<string, Pack> _map;
-
     void init();
-
-    bool setValue(const string& key, Pack val);
-
-    string trim(string &);
-
-    string checkUTF8Valid(string &);
-
-    Pack &get(const string&);
-
-    bool has(const string&);
-
-    const unsigned CODE_LENGTH_LIMIT = 1 << 13;
 };
 
 

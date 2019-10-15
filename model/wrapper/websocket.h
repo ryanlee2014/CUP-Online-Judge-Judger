@@ -34,6 +34,11 @@ public:
 
 	bool isConnected();
 
+	string getMessageSync();
+
+    template<class Callable>
+    string getMessageAsync(Callable callable);
+
 	websocket &emit(const std::string &str);
 
 	websocket &emit(const nlohmann::json &json);
@@ -45,6 +50,8 @@ public:
 	websocket &operator<<(const std::string &str);
 
 	websocket &operator<<(const nlohmann::json &json);
+
+	websocket &operator>>(const nlohmann::json &json);
 
 private:
 	easywsclient::WebSocket::pointer wsconnect;
