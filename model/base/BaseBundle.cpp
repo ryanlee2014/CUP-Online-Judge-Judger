@@ -92,7 +92,9 @@ string BaseBundle::toJSONString(string&& type) {
             JSON["value"][i.first] = e.what();
         }
     }
-    return JSON.dump();
+    string jsonString = JSON.dump();
+    cout << "jsonString: " << jsonString << endl;
+    return jsonString;
 }
 
 string BaseBundle::toJSONString(string & key) {
