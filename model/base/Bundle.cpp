@@ -92,3 +92,7 @@ Bundle &Bundle::setSolutionId(int solution_id) {
     BaseBundle::setSolutionId(solution_id);
     return *this;
 }
+
+bool Bundle::setRuntimeInfo(string& runtime_info) {
+    return setValue("runtime_info", Pack(checkUTF8Valid(runtime_info)));
+}

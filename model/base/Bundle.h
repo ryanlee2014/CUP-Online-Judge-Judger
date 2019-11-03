@@ -51,6 +51,8 @@ public:
 
     bool setTotalPoint(int);
 
+    bool setRuntimeInfo(string &);
+
     string toJSONString();
 
     operator string();
