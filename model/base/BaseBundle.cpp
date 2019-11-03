@@ -5,12 +5,12 @@
 #include "BaseBundle.h"
 #include <iostream>
 #include "../../library/judge_lib.h"
-#include "../../library/json.hpp"
-
-using nlohmann::detail::type_error;
+#include "../../rapidjson/stringbuffer.h"
+#include "../../rapidjson/writer.h"
 
 using std::cerr;
 using std::endl;
+
 bool BaseBundle::setValue(const string &key, Pack val) {
     try {
         this->_map[key] = std::move(val);
@@ -22,11 +22,11 @@ bool BaseBundle::setValue(const string &key, Pack val) {
     return true;
 }
 
-Pack &BaseBundle::get(const string & key) {
+Pack &BaseBundle::get(const string &key) {
     return this->_map[key];
 }
 
-bool BaseBundle::has(const string & key) {
+bool BaseBundle::has(const string &key) {
     return this->_map.find(key) != this->_map.end();
 }
 
@@ -54,8 +54,7 @@ void BaseBundle::clear() {
     init();
     if (has("wid") && get("wid").isInt()) {
         setValue("wid", Pack(get("wid").setInt(get("wid").getInt() + 1)));
-    }
-    else {
+    } else {
         setValue("wid", Pack(0));
     }
 }
@@ -64,39 +63,41 @@ void BaseBundle::setSolutionId(int solution_id) {
     setValue("solution_id", Pack(solution_id));
 }
 
-string BaseBundle::toJSONString(const char * str) {
+string BaseBundle::toJSONString(const char *str) {
     return toJSONString(string(str));
 }
 
-string BaseBundle::toJSONString(string&& type) {
-    json JSON;
-    JSON["type"] = type;
-    for(auto& i:_map) {
-        try {
-            switch (i.second.getType()) {
-                case INT:
-                    JSON["value"][i.first] = i.second.getInt();
-                    break;
-                case DOUBLE:
-                    JSON["value"][i.first] = i.second.getFloat();
-                    break;
-                case STRING:
-                    JSON["value"][i.first] = i.second.getString();
-                    break;
-                default:
-                    JSON["value"][i.first] = false;
-            }
-            JSON.dump();
-        }
-        catch(type_error& e) {
-            JSON["value"][i.first] = e.what();
+string BaseBundle::toJSONString(string &&type) {
+    rapidjson::StringBuffer stringBuffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(stringBuffer);
+    writer.StartObject();
+    writer.Key("type");
+    writer.String(type.c_str());
+    writer.Key("value");
+    writer.StartObject();
+    for (auto &i:_map) {
+        writer.Key(i.first.c_str());
+        switch (i.second.getType()) {
+            case INT:
+                writer.Int(i.second.getInt());
+                break;
+            case DOUBLE:
+                writer.Double(i.second.getFloat());
+                break;
+            case STRING:
+                writer.String(i.second.getString().c_str());
+                break;
+            default:
+                writer.Bool(false);
         }
     }
-    string jsonString = JSON.dump();
+    writer.EndObject();
+    writer.EndObject();
+    string jsonString = stringBuffer.GetString();
     cout << "jsonString: " << jsonString << endl;
     return jsonString;
 }
 
-string BaseBundle::toJSONString(string & key) {
+string BaseBundle::toJSONString(string &key) {
     return toJSONString(std::forward<string>(key));
 }
