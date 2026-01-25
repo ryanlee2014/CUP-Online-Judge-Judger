@@ -31,6 +31,35 @@
 *.out
 *.app
 
+# CMake build outputs
+/CMakeCache.txt
+/CMakeFiles/
+/CTestTestfile.cmake
+/Makefile
+/cmake_install.cmake
+**/CMakeCache.txt
+**/CMakeFiles/
+**/Makefile
+**/cmake_install.cmake
+**/CTestTestfile.cmake
+/build*/
+
+# Coverage artifacts
+*.gcda
+*.gcno
+*.gcov
+*.info
+*.profraw
+*.profdata
+/lcov_list.txt
+/lcov_low.txt
+/coverage.info
+
+# Build binaries
+/judge_client
+/judge_tests
+/wsjudged
+
 .idea
 /**/.idea/**
 .vscode/settings.json
@@ -202,6 +231,16 @@ model/judge/language/CMakeFiles/csharp.dir/DependInfo.cmake
 model/judge/language/CMakeFiles/csharp.dir/flags.make
 model/judge/language/CMakeFiles/csharp.dir/link.txt
 model/judge/language/CMakeFiles/csharp.dir/progress.make
+
+# sim generated sources
+sim/c++lang.c
+sim/clang.c
+sim/javalang.c
+sim/lisplang.c
+sim/m2lang.c
+sim/miralang.c
+sim/pascallang.c
+sim/textlang.c
 model/judge/language/CMakeFiles/freebasic.dir/build.make
 model/judge/language/CMakeFiles/freebasic.dir/cmake_clean.cmake
 model/judge/language/CMakeFiles/freebasic.dir/depend.make
@@ -328,3 +367,15 @@ model/judge/language/CMakeFiles/schema.dir/DependInfo.cmake
 model/judge/language/CMakeFiles/schema.dir/flags.make
 model/judge/language/CMakeFiles/schema.dir/link.txt
 model/judge/language/CMakeFiles/schema.dir/progress.make
+
+# Build outputs
+/build/
+/build-*/
+/cmake-build-*/
+
+# Coverage artifacts
+*.gcda
+*.gcno
+*.gcov
+/coverage*.info
+ce.txt

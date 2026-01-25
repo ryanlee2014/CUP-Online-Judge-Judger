@@ -63,6 +63,21 @@ using CompilerArgsReader = JSONVectorReader;
 using ConfigReader = JSONVectorReader;
 //
 
+JudgeResult judge_solution(int &ACflg, double &usedtime, double time_lmt, int isspj,
+                           int p_id, char *infile, char *outfile, char *userfile, char *usercode, int &PEflg,
+                           int lang, char *work_dir, int &topmemory, int mem_lmt,
+                           int solution_id, int num_of_test, string &global_work_dir);
+
+void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int isspj,
+                                 char *userfile, char *outfile, int solution_id, int lang,
+                                 int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
+                                 int &PEflg, char *work_dir, int file_id, int* call_counter);
+
+JudgeResult
+runJudgeTask(int runner_id, int language, char *work_dir, pair<string, int> &infilePair, int ACflg, int SPECIAL_JUDGE,
+             int solution_id, double timeLimit, double usedtime, int memoryLimit,
+             int problemId, char *usercode, int num_of_test, string &global_work_dir);
+
 
 /*copy from ZOJ
  http://code.google.com/p/zoj/source/browse/trunk/judge_client/client/tracer.cc?spec=svn367&r=367#39
@@ -185,6 +200,260 @@ int compile(int lang, char *work_dir) {
  }
  */
 
+static void configure_and_run(shared_ptr<Language> &languageModel, char *work_dir, double time_lmt, double usedtime,
+                              int mem_lmt, double mem_cur_factor, double mem_max_factor) {
+    if (use_ptrace) {
+        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+    }
+    languageModel->buildChrootSandbox(work_dir);
+    setRunUser();
+    struct rlimit LIM{};
+    if (ALL_TEST_MODE)
+        LIM.rlim_cur = static_cast<rlim_t>(time_lmt + 1);
+    else
+        LIM.rlim_cur = static_cast<rlim_t>((time_lmt - usedtime / 1000) + 1);
+    LIM.rlim_max = LIM.rlim_cur;
+    setrlimit(RLIMIT_CPU, &LIM);
+    alarm(0);
+    alarm(static_cast<unsigned int>(time_lmt * 10));
+
+    LIM.rlim_max = ((STD_F_LIM << 2) + STD_MB);
+    LIM.rlim_cur = (STD_F_LIM << 2);
+    setrlimit(RLIMIT_FSIZE, &LIM);
+    languageModel->setProcessLimit();
+
+    LIM.rlim_cur = static_cast<rlim_t>(STD_MB << 7);
+    LIM.rlim_max = static_cast<rlim_t>(STD_MB << 7);
+    setrlimit(RLIMIT_STACK, &LIM);
+
+    LIM.rlim_cur = static_cast<rlim_t>(STD_MB * mem_lmt * mem_cur_factor);
+    LIM.rlim_max = static_cast<rlim_t>(STD_MB * mem_lmt * mem_max_factor);
+    languageModel->runMemoryLimit(LIM);
+    if (!use_ptrace) {
+        languageModel->buildSeccompSandbox();
+    }
+    languageModel->run(mem_lmt);
+    fflush(stderr);
+    exit(0);
+}
+
+static bool handle_error_conditions(shared_ptr<Language> &languageModel, const char *errorFile, int &ACflg,
+                                    int solution_id, pid_t pidApp) {
+    bool has_error = get_file_size(errorFile) > 0;
+    if (has_error) {
+        if (DEBUG) {
+            cerr << "Catch error:" << endl;
+            fstream err(errorFile);
+            stringstream ss;
+            ss << err.rdbuf();
+            cerr << ss.str() << endl;
+        }
+        fstream file(errorFile, ios::ate);
+        stringstream buffer;
+        buffer << file.rdbuf();
+        string contents(buffer.str());
+        if (contents.find("Killed") != std::string::npos) {
+            write_log(oj_home, contents.c_str());
+            print_runtimeerror(contents.c_str());
+            return true;
+        }
+    }
+    if (languageModel->gotErrorWhileRunning(has_error) && !ALL_TEST_MODE) {
+        ACflg = RUNTIME_ERROR;
+        if (use_ptrace) {
+            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool handle_output_limit(int isspj, const char *userfile, const char *outfile, int &ACflg, pid_t pidApp) {
+    if (!isspj && get_file_size(userfile) > get_file_size(outfile) * 2 + 1024) {
+        ACflg = OUTPUT_LIMIT_EXCEEDED;
+        if (use_ptrace) {
+            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool handle_exit_status(shared_ptr<Language> &languageModel, int status, int &ACflg, pid_t pidApp) {
+    int exitcode = WEXITSTATUS(status);
+    if (languageModel->isValidExitCode(exitcode)) {
+        return false;
+    }
+    if (DEBUG) {
+        printf("status>>8=%d\n", exitcode);
+    }
+    if (ACflg == ACCEPT) {
+        switch (exitcode) {
+            case SIGCHLD:
+            case SIGALRM:
+                alarm(0);
+            case SIGKILL:
+            case SIGXCPU:
+                ACflg = TIME_LIMIT_EXCEEDED;
+                break;
+            case SIGXFSZ:
+                ACflg = OUTPUT_LIMIT_EXCEEDED;
+                break;
+            default:
+                ACflg = RUNTIME_ERROR;
+        }
+        print_runtimeerror(strsignal(exitcode));
+    }
+    if (use_ptrace) {
+        ptrace(PTRACE_KILL, pidApp, NULL, NULL);
+    }
+    return true;
+}
+
+static bool handle_signal_status(int status, int &ACflg) {
+    if (!WIFSIGNALED(status)) {
+        return false;
+    }
+    int sig = WTERMSIG(status);
+    if (DEBUG) {
+        printf("WTERMSIG=%d\n", sig);
+        psignal(sig, nullptr);
+    }
+    if (ACflg == ACCEPT) {
+        switch (sig) {
+            case SIGCHLD:
+            case SIGALRM:
+                alarm(0);
+            case SIGKILL:
+            case SIGXCPU:
+                ACflg = TIME_LIMIT_EXCEEDED;
+                break;
+            case SIGXFSZ:
+                ACflg = OUTPUT_LIMIT_EXCEEDED;
+                break;
+            default:
+                ACflg = RUNTIME_ERROR;
+        }
+        print_runtimeerror(strsignal(sig));
+    }
+    return true;
+}
+
+static void handle_ptrace_syscall(pid_t pidApp, int &ACflg, int solution_id, int *call_counter_local) {
+    if (use_ptrace) {
+        struct user_regs_struct reg{};
+        ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
+        if (call_counter_local[reg.REG_SYSCALL]) {
+        } else if (record_call) {
+            call_counter_local[reg.REG_SYSCALL] = 1;
+        } else {
+            ACflg = RUNTIME_ERROR;
+            string _error;
+            _error = string("Current Program use not allowed system call.\nSolution ID:") + to_string(solution_id) +
+                     "\n";
+            _error += string("Syscall ID:") + to_string(reg.REG_SYSCALL) + "\n";
+            write_log(oj_home, _error.c_str());
+            print_runtimeerror(_error.c_str());
+            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
+        }
+        ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
+    }
+}
+
+static bool update_memory_and_check(shared_ptr<Language> &languageModel, const struct rusage &ruse, pid_t pidApp,
+                                    int mem_lmt, int &topmemory, int &ACflg) {
+    int tempmemory = languageModel->getMemory(ruse, pidApp);
+    topmemory = max(tempmemory, topmemory);
+    if (topmemory > mem_lmt * STD_MB) {
+        if (DEBUG)
+            printf("out of memory %d\n", topmemory);
+        if (ACflg == ACCEPT)
+            ACflg = MEMORY_LIMIT_EXCEEDED;
+        if (use_ptrace) {
+            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
+        }
+        return true;
+    }
+    return false;
+}
+
+static void add_usedtime(double &usedtime, const struct rusage &ruse) {
+    usedtime += (ruse.ru_utime.tv_sec * 1000 + ruse.ru_utime.tv_usec / 1000);
+    usedtime += (ruse.ru_stime.tv_sec * 1000 + ruse.ru_stime.tv_usec / 1000);
+}
+
+static bool wait_and_update(pid_t pidApp, int &status, struct rusage &ruse, shared_ptr<Language> &languageModel,
+                            int mem_lmt, int &topmemory, int &ACflg) {
+    wait4(pidApp, &status, 0, &ruse);
+    return update_memory_and_check(languageModel, ruse, pidApp, mem_lmt, topmemory, ACflg);
+}
+
+static bool process_watch_iteration(pid_t pidApp, int &status, struct rusage &ruse, shared_ptr<Language> &languageModel,
+                                    int mem_lmt, int &topmemory, int &ACflg, int isspj, const char *userfile,
+                                    const char *outfile, const char *errorFile, int solution_id, int *call_counter_local) {
+    if (wait_and_update(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg)) {
+        return true;
+    }
+    if (WIFEXITED(status))
+        return true;
+    if (handle_error_conditions(languageModel, errorFile, ACflg, solution_id, pidApp)) {
+        return true;
+    }
+    if (handle_output_limit(isspj, userfile, outfile, ACflg, pidApp)) {
+        return true;
+    }
+    if (handle_exit_status(languageModel, status, ACflg, pidApp)) {
+        return true;
+    }
+    if (handle_signal_status(status, ACflg)) {
+        return true;
+    }
+    handle_ptrace_syscall(pidApp, ACflg, solution_id, call_counter_local);
+    return false;
+}
+
+static void prepare_run_files_with_id(int language, int runner_id, const pair<string, int> &infilePair, int problemId,
+                                      char *work_dir, int num_of_test, int call_counter_local[call_array_size],
+                                      char *infile, char *outfile, char *userfile) {
+    InitManager::initSyscallLimits(language, call_counter_local, record_call, call_array_size);
+    prepare_files_with_id(infilePair.first.c_str(), infilePair.second, infile, problemId, work_dir, outfile,
+                          userfile, runner_id, num_of_test);
+    cout << "infile: " << infile << " outfile " << outfile << " userfile " << userfile << endl;
+    cout << "num of test: " << num_of_test << endl;
+}
+
+static JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int solution_id, int language,
+                                      int &topmemory, int memoryLimit, double &usedtime, double timeLimit, int problemId,
+                                      int &PEflg, char *work_dir, int num_of_test, int call_counter_local[call_array_size],
+                                      char *infile, char *outfile, char *userfile, char *usercode,
+                                      string &global_work_dir) {
+    watch_solution_with_file_id(pid, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
+                                solution_id, language, topmemory, memoryLimit, usedtime, timeLimit,
+                                problemId, PEflg, work_dir, num_of_test, call_counter_local);
+    judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, problemId, infile,
+                   outfile, userfile, usercode, PEflg, language, work_dir, topmemory,
+                   memoryLimit, solution_id, num_of_test, global_work_dir);
+    return {ACflg, usedtime, topmemory, num_of_test};
+}
+
+static future<JudgeResult> enqueue_judge_task(ThreadPool &pool, int runner_id, int language, char *work_dir,
+                                              pair<string, int> &infilePair, int &ACflg, int SPECIAL_JUDGE,
+                                              int solution_id, double timeLimit, int memoryLimit, int problemId,
+                                              char *usercode, int num_of_test, string &global_work_dir) {
+    double usedtime = 0;
+    return pool.enqueue(runJudgeTask,
+                        runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE, solution_id,
+                        timeLimit, usedtime, memoryLimit, problemId, usercode, num_of_test, global_work_dir);
+}
+
+static void update_series_result(JudgeSeriesResult &finalResult, const JudgeResult &r) {
+    cout << "Flag " << r.ACflg << "Memory " << r.topMemory << "UsedTime " << r.usedTime << "Num " << r.num << endl;
+    finalResult.ACflg = max(finalResult.ACflg, r.ACflg);
+    finalResult.topMemory = max(finalResult.topMemory, r.topMemory);
+    finalResult.usedTime = max(finalResult.usedTime, r.usedTime);
+    finalResult.pass_point += r.ACflg == ACCEPT;
+}
+
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                            int &mem_lmt, int fileId) {
     shared_ptr<Language> languageModel(getLanguageModel(lang));
@@ -199,55 +468,7 @@ void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &
     freopen(input, "r", stdin);
     freopen(userOutput, "w", stdout);
     freopen(errorOutput, "a+", stderr);
-    //if(!DEBUG)
-    //
-
-    //}
-    // trace me
-    if (use_ptrace) {
-        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-    }
-    // run me
-    languageModel->buildChrootSandbox(work_dir);
-    setRunUser();
-    //      char java_p1[BUFFER_SIZE], java_p2[BUFFER_SIZE];
-    // child
-    // set the limit
-    struct rlimit LIM{}; // time limit, file limit& memory limit
-    // time limit
-    if (ALL_TEST_MODE)
-        LIM.rlim_cur = static_cast<rlim_t>(time_lmt + 1);
-    else
-        LIM.rlim_cur = static_cast<rlim_t>((time_lmt - usedtime / 1000) + 1);
-    LIM.rlim_max = LIM.rlim_cur;
-    //if(DEBUG) printf("LIM_CPU=%d",(int)(LIM.rlim_cur));
-    setrlimit(RLIMIT_CPU, &LIM);
-    alarm(0);
-    // alarm(time_lmt * 10);
-    alarm(static_cast<unsigned int>(time_lmt * 10));
-
-    // file limit
-    LIM.rlim_max = ((STD_F_LIM << 2) + STD_MB);
-    LIM.rlim_cur = (STD_F_LIM << 2);
-    setrlimit(RLIMIT_FSIZE, &LIM);
-    // proc limit
-    languageModel->setProcessLimit();
-
-    // set the stack
-    LIM.rlim_cur = static_cast<rlim_t>(STD_MB << 7);
-    LIM.rlim_max = static_cast<rlim_t>(STD_MB << 7);
-    setrlimit(RLIMIT_STACK, &LIM);
-    // set the memory
-    LIM.rlim_cur = static_cast<rlim_t>(STD_MB * mem_lmt);
-    LIM.rlim_max = static_cast<rlim_t>(STD_MB * mem_lmt);
-    languageModel->runMemoryLimit(LIM);
-    if (!use_ptrace) {
-        languageModel->buildSeccompSandbox();
-    }
-    languageModel->run(mem_lmt);
-    //sleep(1);
-    fflush(stderr);
-    exit(0);
+    configure_and_run(languageModel, work_dir, time_lmt, usedtime, mem_lmt, 1.0, 1.0);
 }
 
 void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
@@ -264,51 +485,7 @@ void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
     freopen("error.out", "a+", stderr);
 
     //}
-    // trace me
-    if (use_ptrace) {
-        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-    }
-    // run me
-    languageModel->buildChrootSandbox(work_dir);
-    setRunUser();
-    //      char java_p1[BUFFER_SIZE], java_p2[BUFFER_SIZE];
-    // child
-    // set the limit
-    struct rlimit LIM{}; // time limit, file limit& memory limit
-    // time limit
-    if (ALL_TEST_MODE)
-        LIM.rlim_cur = static_cast<rlim_t>(time_lmt + 1);
-    else
-        LIM.rlim_cur = static_cast<rlim_t>((time_lmt - usedtime / 1000) + 1);
-    LIM.rlim_max = LIM.rlim_cur;
-    //if(DEBUG) printf("LIM_CPU=%d",(int)(LIM.rlim_cur));
-    setrlimit(RLIMIT_CPU, &LIM);
-    alarm(0);
-    // alarm(time_lmt * 10);
-    alarm(static_cast<unsigned int>(time_lmt * 10));
-
-    // file limit
-    LIM.rlim_max = ((STD_F_LIM << 2) + STD_MB);
-    LIM.rlim_cur = (STD_F_LIM << 2);
-    setrlimit(RLIMIT_FSIZE, &LIM);
-    // proc limit
-    languageModel->setProcessLimit();
-
-    // set the stack
-    LIM.rlim_cur = static_cast<rlim_t>(STD_MB << 7);
-    LIM.rlim_max = static_cast<rlim_t>(STD_MB << 7);
-    setrlimit(RLIMIT_STACK, &LIM);
-    // set the memory
-    LIM.rlim_cur = static_cast<rlim_t>(STD_MB * mem_lmt / 2 * 3);
-    LIM.rlim_max = static_cast<rlim_t>(STD_MB * mem_lmt * 2);
-    languageModel->runMemoryLimit(LIM);
-    if (!use_ptrace) {
-        languageModel->buildSeccompSandbox();
-    }
-    languageModel->run(mem_lmt);
-    //sleep(1);
-    fflush(stderr);
-    exit(0);
+    configure_and_run(languageModel, work_dir, time_lmt, usedtime, mem_lmt, 1.5, 2.0);
 }
 
 JudgeResult judge_solution(int &ACflg, double &usedtime, double time_lmt, int isspj,
@@ -361,177 +538,22 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
                     int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
                     int &PEflg, char *work_dir) {
     // parent
-    int tempmemory;
     shared_ptr<Language> languageModel(getLanguageModel(lang));
     if (DEBUG) {
         printf("pid=%d judging %s\n", pidApp, infile);
     }
-    int status, sig, exitcode;
-    struct user_regs_struct reg{};
+    int status;
     struct rusage ruse{};
     if (topmemory == 0)
         topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
     while (true) {
-        // check the usage
-        wait4(pidApp, &status, 0, &ruse);
-        //jvm gc ask VM before need,so used kernel page fault times and page size
-        tempmemory = languageModel->getMemory(ruse, pidApp);
-        topmemory = max(tempmemory, topmemory);
-        if (topmemory > mem_lmt * STD_MB) {
-            if (DEBUG)
-                printf("out of memory %d\n", topmemory);
-            if (ACflg == ACCEPT)
-                ACflg = MEMORY_LIMIT_EXCEEDED;
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
+        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, isspj,
+                                    userfile, outfile, "error.out", solution_id, call_counter)) {
             break;
-        }
-        //sig = status >> 8;/*status >> 8 EXITCODE*/
-
-        if (WIFEXITED(status))
-            break;
-        bool has_error = get_file_size("error.out") > 0;
-        if (has_error) {
-            if (DEBUG) {
-                cerr << "Catch error:" << endl;
-                fstream err("error.out");
-                stringstream ss;
-                ss << err.rdbuf();
-                cerr << ss.str() << endl;
-            }
-            //ACflg = OJ_RE;
-            fstream file("error.out", ios::ate);
-            stringstream buffer;
-            buffer << file.rdbuf();
-            string contents(buffer.str());
-            if (contents.find("Killed") != std::string::npos) {
-                write_log(oj_home, contents.c_str());
-                print_runtimeerror(contents.c_str());
-                //ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-                //print_runtimeerror(contents.c_str());
-                break;
-            }
-        }
-        if (languageModel->gotErrorWhileRunning(has_error) && !ALL_TEST_MODE) {
-            ACflg = RUNTIME_ERROR;
-            //addreinfo(solution_id);
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            break;
-        }
-
-
-        if (!isspj
-            && get_file_size(userfile)
-               > get_file_size(outfile) * 2 + 1024) {
-            ACflg = OUTPUT_LIMIT_EXCEEDED;
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            break;
-        }
-
-        exitcode = WEXITSTATUS(status);
-        /*exitcode == 5 waiting for next CPU allocation          * ruby using system to run,exit 17 ok
-         *  */
-        if (languageModel->isValidExitCode(exitcode))
-            //go on and on
-            ;
-        else {
-
-            if (DEBUG) {
-                printf("status>>8=%d\n", exitcode);
-
-            }
-            //psignal(exitcode, NULL);
-
-            if (ACflg == ACCEPT) {
-                switch (exitcode) {
-                    case SIGCHLD:
-                    case SIGALRM:
-                        alarm(0);
-                    case SIGKILL:
-                    case SIGXCPU:
-                        ACflg = TIME_LIMIT_EXCEEDED;
-                        break;
-                    case SIGXFSZ:
-                        ACflg = OUTPUT_LIMIT_EXCEEDED;
-                        break;
-                    default:
-                        ACflg = RUNTIME_ERROR;
-                }
-                print_runtimeerror(strsignal(exitcode));
-            }
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            break;
-        }
-        if (WIFSIGNALED(status)) {
-            /*  WIFSIGNALED: if the process is terminated by signal
-             *
-             *  psignal(int sig, char *s)，like perror(char *s)，print out s, with error msg from system of sig
-             * sig = 5 means Trace/breakpoint trap
-             * sig = 11 means Segmentation fault
-             * sig = 25 means File size limit exceeded
-             */
-            sig = WTERMSIG(status);
-            if (DEBUG) {
-                printf("WTERMSIG=%d\n", sig);
-                psignal(sig, nullptr);
-            }
-            if (ACflg == ACCEPT) {
-                switch (sig) {
-                    case SIGCHLD:
-                    case SIGALRM:
-                        alarm(0);
-                    case SIGKILL:
-                    case SIGXCPU:
-                        ACflg = TIME_LIMIT_EXCEEDED;
-                        break;
-                    case SIGXFSZ:
-                        ACflg = OUTPUT_LIMIT_EXCEEDED;
-                        break;
-                    default:
-                        ACflg = RUNTIME_ERROR;
-                }
-                print_runtimeerror(strsignal(sig));
-            }
-            break;
-        }
-        /*     comment from http://www.felix021.com/blog/read.php?1662
-
-         WIFSTOPPED: return true if the process is paused or stopped while ptrace is watching on it
-         WSTOPSIG: get the signal if it was stopped by signal
-         */
-
-        // check the system calls
-        if (use_ptrace) {
-            ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
-            if (call_counter[reg.REG_SYSCALL]) {
-                //call_counter[reg.REG_SYSCALL]--;
-            } else if (record_call) {
-                call_counter[reg.REG_SYSCALL] = 1;
-
-            } else { //do not limit JVM syscall for using different JVM
-                ACflg = RUNTIME_ERROR;
-                string _error;
-                _error = string("Current Program use not allowed system call.\nSolution ID:") + to_string(solution_id) +
-                         "\n";
-                _error += string("Syscall ID:") + to_string(reg.REG_SYSCALL) + "\n";
-
-                write_log(oj_home, _error.c_str());
-                print_runtimeerror(_error.c_str());
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
         }
     }
 
-    usedtime += (ruse.ru_utime.tv_sec * 1000 + ruse.ru_utime.tv_usec / 1000);
-    usedtime += (ruse.ru_stime.tv_sec * 1000 + ruse.ru_stime.tv_usec / 1000);
+    add_usedtime(usedtime, ruse);
 
     //clean_session(pidApp);
 }
@@ -541,180 +563,25 @@ void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int iss
                                  int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
                                  int &PEflg, char *work_dir, int file_id, int* call_counter) {
     // parent
-    int tempmemory;
     char errorFile[BUFFER_SIZE];
     sprintf(errorFile, "error%d.out", file_id);
     shared_ptr<Language> languageModel(getLanguageModel(lang));
     if (DEBUG) {
         printf("pid=%d judging %s\n", pidApp, infile);
     }
-    int status, sig, exitcode;
-    struct user_regs_struct reg{};
+    int status;
     struct rusage ruse{};
     if (topmemory == 0) {
         topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
     }
     while (true) {
-        // check the usage
-        wait4(pidApp, &status, 0, &ruse);
-        //jvm gc ask VM before need,so used kernel page fault times and page size
-        tempmemory = languageModel->getMemory(ruse, pidApp);
-        topmemory = max(tempmemory, topmemory);
-        if (topmemory > mem_lmt * STD_MB) {
-            if (DEBUG)
-                printf("out of memory %d\n", topmemory);
-            if (ACflg == ACCEPT)
-                ACflg = MEMORY_LIMIT_EXCEEDED;
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
+        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, isspj,
+                                    userfile, outfile, errorFile, solution_id, call_counter)) {
             break;
-        }
-        //sig = status >> 8;/*status >> 8 EXITCODE*/
-
-        if (WIFEXITED(status))
-            break;
-        bool has_error = get_file_size(errorFile) > 0;
-        if (has_error) {
-            if (DEBUG) {
-                cerr << "Catch error:" << endl;
-                fstream err(errorFile);
-                stringstream ss;
-                ss << err.rdbuf();
-                cerr << ss.str() << endl;
-            }
-            //ACflg = OJ_RE;
-            fstream file(errorFile, ios::ate);
-            stringstream buffer;
-            buffer << file.rdbuf();
-            string contents(buffer.str());
-            if (contents.find("Killed") != std::string::npos) {
-                write_log(oj_home, contents.c_str());
-                print_runtimeerror(contents.c_str());
-                //ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-                //print_runtimeerror(contents.c_str());
-                break;
-            }
-        }
-        if (languageModel->gotErrorWhileRunning(has_error) && !ALL_TEST_MODE) {
-            ACflg = RUNTIME_ERROR;
-            //addreinfo(solution_id);
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            break;
-        }
-
-
-        if (!isspj
-            && get_file_size(userfile)
-               > get_file_size(outfile) * 2 + 1024) {
-            ACflg = OUTPUT_LIMIT_EXCEEDED;
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            break;
-        }
-
-        exitcode = WEXITSTATUS(status);
-        /*exitcode == 5 waiting for next CPU allocation          * ruby using system to run,exit 17 ok
-         *  */
-        if (languageModel->isValidExitCode(exitcode))
-            //go on and on
-            ;
-        else {
-
-            if (DEBUG) {
-                printf("status>>8=%d\n", exitcode);
-
-            }
-            //psignal(exitcode, NULL);
-
-            if (ACflg == ACCEPT) {
-                switch (exitcode) {
-                    case SIGCHLD:
-                    case SIGALRM:
-                        alarm(0);
-                    case SIGKILL:
-                    case SIGXCPU:
-                        ACflg = TIME_LIMIT_EXCEEDED;
-                        break;
-                    case SIGXFSZ:
-                        ACflg = OUTPUT_LIMIT_EXCEEDED;
-                        break;
-                    default:
-                        ACflg = RUNTIME_ERROR;
-                }
-                print_runtimeerror(strsignal(exitcode));
-            }
-            if (use_ptrace) {
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            break;
-        }
-        if (WIFSIGNALED(status)) {
-            /*  WIFSIGNALED: if the process is terminated by signal
-             *
-             *  psignal(int sig, char *s)，like perror(char *s)，print out s, with error msg from system of sig
-             * sig = 5 means Trace/breakpoint trap
-             * sig = 11 means Segmentation fault
-             * sig = 25 means File size limit exceeded
-             */
-            sig = WTERMSIG(status);
-            if (DEBUG) {
-                printf("WTERMSIG=%d\n", sig);
-                psignal(sig, nullptr);
-            }
-            if (ACflg == ACCEPT) {
-                switch (sig) {
-                    case SIGCHLD:
-                    case SIGALRM:
-                        alarm(0);
-                    case SIGKILL:
-                    case SIGXCPU:
-                        ACflg = TIME_LIMIT_EXCEEDED;
-                        break;
-                    case SIGXFSZ:
-                        ACflg = OUTPUT_LIMIT_EXCEEDED;
-                        break;
-                    default:
-                        ACflg = RUNTIME_ERROR;
-                }
-                print_runtimeerror(strsignal(sig));
-            }
-            break;
-        }
-        /*     comment from http://www.felix021.com/blog/read.php?1662
-
-         WIFSTOPPED: return true if the process is paused or stopped while ptrace is watching on it
-         WSTOPSIG: get the signal if it was stopped by signal
-         */
-
-        // check the system calls
-        if (use_ptrace) {
-            ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
-            if (call_counter[reg.REG_SYSCALL]) {
-                //call_counter[reg.REG_SYSCALL]--;
-            } else if (record_call) {
-                call_counter[reg.REG_SYSCALL] = 1;
-
-            } else { //do not limit JVM syscall for using different JVM
-                ACflg = RUNTIME_ERROR;
-                string _error;
-                _error = string("Current Program use not allowed system call.\nSolution ID:") + to_string(solution_id) +
-                         "\n";
-                _error += string("Syscall ID:") + to_string(reg.REG_SYSCALL) + "\n";
-
-                write_log(oj_home, _error.c_str());
-                print_runtimeerror(_error.c_str());
-                ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-            }
-            ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
         }
     }
 
-    usedtime += (ruse.ru_utime.tv_sec * 1000 + ruse.ru_utime.tv_usec / 1000);
-    usedtime += (ruse.ru_stime.tv_sec * 1000 + ruse.ru_stime.tv_usec / 1000);
+    add_usedtime(usedtime, ruse);
 
     //clean_session(pidApp);
 }
@@ -726,23 +593,16 @@ runJudgeTask(int runner_id, int language, char *work_dir, pair<string, int> &inf
     int call_counter[call_array_size], PEflg;
     char infile[BUFFER_SIZE], outfile[BUFFER_SIZE], userfile[BUFFER_SIZE];
     int topmemory = 0;
-    InitManager::initSyscallLimits(language, call_counter, record_call, call_array_size);
-    prepare_files_with_id(infilePair.first.c_str(), infilePair.second, infile, problemId, work_dir, outfile,
-                          userfile, runner_id, num_of_test);
-    cout << "infile: " << infile << " outfile " << outfile << " userfile " << userfile << endl;
-    cout << "num of test: " << num_of_test << endl;
+    prepare_run_files_with_id(language, runner_id, infilePair, problemId, work_dir, num_of_test, call_counter,
+                              infile, outfile, userfile);
     auto pid = fork();
     if (pid == CHILD_PROCESS) {
         run_solution_parallel(language, work_dir, timeLimit, usedtime, memoryLimit, num_of_test);
         return {};
     } else {
-        watch_solution_with_file_id(pid, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
-                                    solution_id, language, topmemory, memoryLimit, usedtime, timeLimit,
-                                    problemId, PEflg, work_dir, num_of_test, call_counter);
-        judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, problemId, infile,
-                       outfile, userfile, usercode, PEflg, language, work_dir, topmemory,
-                       memoryLimit, solution_id, num_of_test, global_work_dir);
-        return {ACflg, usedtime, topmemory, num_of_test};
+        return finish_run_with_id(pid, ACflg, SPECIAL_JUDGE, solution_id, language, topmemory, memoryLimit, usedtime,
+                                  timeLimit, problemId, PEflg, work_dir, num_of_test, call_counter, infile, outfile,
+                                  userfile, usercode, global_work_dir);
     }
 }
 
@@ -754,24 +614,16 @@ runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, in
     vector<future<JudgeResult>> result;
     int num_of_test = 0;
     for (auto &infilePair: inFileList) {
-        double usedtime = 0;
-
-        result.emplace_back(
-                pool.enqueue(runJudgeTask,
-                             runner_id, submissionInfo.getLanguage(), work_dir, infilePair,
-                             ACflg, SPECIAL_JUDGE, submissionInfo.getSolutionId(),
-                             submissionInfo.getTimeLimit(), usedtime, submissionInfo.getMemoryLimit(),
-                             submissionInfo.getProblemId(), usercode, num_of_test, global_work_dir));
+        result.emplace_back(enqueue_judge_task(pool, runner_id, submissionInfo.getLanguage(), work_dir, infilePair,
+                                               ACflg, SPECIAL_JUDGE, submissionInfo.getSolutionId(),
+                                               submissionInfo.getTimeLimit(), submissionInfo.getMemoryLimit(),
+                                               submissionInfo.getProblemId(), usercode, num_of_test, global_work_dir));
         ++num_of_test;
     }
     JudgeSeriesResult finalResult = {3, 0, 0, 0, 0};
     for (auto &res: result) {
         JudgeResult r = res.get();
-        cout << "Flag " << r.ACflg << "Memory " << r.topMemory << "UsedTime " << r.usedTime << "Num " << r.num << endl;
-        finalResult.ACflg = max(finalResult.ACflg, r.ACflg);
-        finalResult.topMemory = max(finalResult.topMemory, r.topMemory);
-        finalResult.usedTime = max(finalResult.usedTime, r.usedTime);
-        finalResult.pass_point += r.ACflg == ACCEPT;
+        update_series_result(finalResult, r);
     }
     return finalResult;
 }

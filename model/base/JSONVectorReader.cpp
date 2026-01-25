@@ -103,10 +103,10 @@ double JSONVectorReader::GetDouble(const string &key) {
 }
 
 Value* JSONVectorReader::GetObject(const string &key) {
-    char BUFFER[1 << 10];
     documentIsLoaded();
     auto& val = document[key.c_str()];
     ASSERT_VALID(val.IsObject());
-    strcpy(BUFFER, ("/" + key).c_str());
-    return rapidjson::GetValueByPointer(document, BUFFER);
+    std::string ptr = "/" + key;
+    rapidjson::Pointer pointer(ptr.c_str());
+    return pointer.Get(document);
 }

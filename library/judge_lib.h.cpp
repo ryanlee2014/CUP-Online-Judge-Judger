@@ -87,19 +87,24 @@ int execute_cmd(const char *fmt, ...) {
 int execute_timeout_cmd(long long timeout, const char *fmt, ...) {
     std::mutex m;
     std::condition_variable cv;
-    int retValue;
+    int retValue = 0;
+    bool done = false;
     char cmd[BUFFER_SIZE];
     va_list ap;
     va_start(ap, fmt);
     vsprintf(cmd, fmt, ap);
     std::thread t([&]() {
         retValue = execute_cmd(cmd);
+        {
+            std::lock_guard<std::mutex> lock(m);
+            done = true;
+        }
         cv.notify_one();
     });
     t.detach();
     {
         std::unique_lock<std::mutex> l(m);
-        if (cv.wait_for(l, timeout * std::chrono::seconds(1)) == std::cv_status::timeout) {
+        if (!cv.wait_for(l, timeout * std::chrono::seconds(1), [&]() { return done; })) {
             throw std::runtime_error("Timeout");
         }
     }
@@ -121,7 +126,7 @@ void trim(char *c) {
     while (isspace(*start))
         ++start;
     end = start;
-    while (!isspace(*end))
+    while (*end && !isspace(*end))
         ++end;
     *end = '\0';
     strcpy(c, start);
@@ -577,12 +582,16 @@ Compare::Compare* getCompareModel() {
 }
 
 void setRunUser () {
+#ifdef UNIT_TEST
+    return;
+#else
     while (setgid(1536) != 0)
         sleep(1);
     while (setuid(1536) != 0)
         sleep(1);
     while (setresuid(1536, 1536, 1536) != 0)
         sleep(1);
+#endif
 }
 
 bool isPython(int language) {
@@ -597,4 +606,3 @@ bool isPython(int language) {
     }
     return false;
 }
-

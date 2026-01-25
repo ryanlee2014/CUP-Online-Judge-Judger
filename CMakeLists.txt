@@ -17,7 +17,8 @@ else ()
     set(CMAKE_C_COMPILER /usr/bin/gcc)
     set(CMAKE_CXX_COMPILER /usr/bin/g++)
 endif ()
-set(CMAKE_CXX_FLAGS "-Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 # set(CMAKE_C_COMPILER /usr/local/bin/gcc)
 # set(CMAKE_CXX_COMPILER /usr/local/bin/g++)
@@ -29,3 +30,77 @@ add_executable(judge_client header/okcalls.h header/ncalls.h header/okcalls32.h 
 add_executable(wsjudged wsjudged.cpp)
 target_link_libraries(judge_client ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(judge_client ${CMAKE_DL_LIBS})
+
+option(ENABLE_TESTS "Build unit tests" ON)
+if (ENABLE_TESTS)
+    enable_testing()
+    set(TEST_SOURCES
+        tests/test_main.cpp
+        tests/test_hooks.cpp
+        tests/stub_easywsclient.cpp
+        tests/judge_client_test.cpp
+        tests/wsjudged_test.cpp
+        header/static_var.cpp
+        library/judge_lib.h.cpp
+        model/base/JSONVectorReader.cpp
+        model/base/Bundle.cpp
+        model/base/Pack.cpp
+        model/websocket/WebSocketSender.cpp
+        model/submission/SubmissionInfo.cpp
+        model/judge/policy/SpecialJudge.cpp
+        model/wrapper/CompilerConfigReader.cpp
+        manager/syscall/InitManager.cpp
+        external/mysql/MySQLSubmissionAdapter.cpp
+        external/mysql/MySQLSubmissionInfoManager.cpp
+        external/mysql/MySQLAutoPointer.cpp
+        external/compare/Compare.cpp
+        external/compare/CompareImpl.cpp
+        model/config/ConfigInfo.cpp
+        model/judge/language/Language.cpp
+        model/judge/language/common/BonusLimit.cpp
+        model/judge/language/common/CPython.cpp
+        model/judge/language/common/seccomp_helper.cpp
+        model/judge/language/C11.cpp
+        model/judge/language/C99.cpp
+        model/judge/language/Clang.cpp
+        model/judge/language/Clang11.cpp
+        model/judge/language/Clangpp.cpp
+        model/judge/language/Clangpp17.cpp
+        model/judge/language/Cpp11.cpp
+        model/judge/language/Cpp17.cpp
+        model/judge/language/Cpp20.cpp
+        model/judge/language/Cpp98.cpp
+        model/judge/language/Bash.cpp
+        model/judge/language/Go.cpp
+        model/judge/language/Java.cpp
+        model/judge/language/Java6.cpp
+        model/judge/language/Java7.cpp
+        model/judge/language/Java8.cpp
+        model/judge/language/Kotlin.cpp
+        model/judge/language/KotlinNative.cpp
+        model/judge/language/Python2.cpp
+        model/judge/language/Python3.cpp
+        model/judge/language/PyPy.cpp
+        model/judge/language/PyPy3.cpp
+        model/judge/language/Php.cpp
+        model/judge/language/Perl.cpp
+        model/judge/language/Ruby.cpp
+        model/judge/language/Lua.cpp
+        model/judge/language/Schema.cpp
+        model/judge/language/JavaScript.cpp
+        model/judge/language/Csharp.cpp
+        model/judge/language/Objc.cpp
+        model/judge/language/FreeBasic.cpp
+        model/judge/language/Pascal.cpp
+    )
+    add_executable(judge_tests ${TEST_SOURCES})
+    target_include_directories(judge_tests PRIVATE tests/fake_mysql tests/fake_seccomp)
+    target_compile_definitions(judge_tests PRIVATE UNIT_TEST)
+    target_compile_options(judge_tests PRIVATE -include ${CMAKE_SOURCE_DIR}/tests/test_hooks.h)
+    target_link_libraries(judge_tests ${CMAKE_THREAD_LIBS_INIT})
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+        CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+        target_link_libraries(judge_tests stdc++fs)
+    endif ()
+    add_test(NAME judge_tests COMMAND judge_tests)
+endif ()

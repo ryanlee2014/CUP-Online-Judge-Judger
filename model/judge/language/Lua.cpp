@@ -23,6 +23,10 @@ void Lua::run(int memory) {
     execv(args[0], args);
 }
 
+char** Lua::getArgs() {
+    return args;
+}
+
 void Lua::buildRuntime(const char *work_dir) {
     Language::buildRuntime(work_dir);
     execute_cmd("/bin/mkdir -p %s/usr/local/lib", work_dir);

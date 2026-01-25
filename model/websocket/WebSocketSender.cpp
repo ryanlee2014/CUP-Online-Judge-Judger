@@ -114,6 +114,9 @@ void WebSocketSender::initQueue(const string &url) {
 
 easywsclient::WebSocket::pointer WebSocketSender::getConnection() {
     LOCK(queueLock);
+    if (wsconnectQueue.empty()) {
+        return WebSocket::from_url(address_);
+    }
     auto pointer = wsconnectQueue.front();
     wsconnectQueue.pop_front();
     return pointer;

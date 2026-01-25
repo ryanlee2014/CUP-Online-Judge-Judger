@@ -119,6 +119,8 @@ bool MySQLSubmissionInfoManager::start() {
     return conn.start();
 }
 
+#ifndef UNIT_TEST
 extern "C" MySQLSubmissionAdapter* createInstance() {
     return new MySQLSubmissionInfoManager;
 }
+#endif
