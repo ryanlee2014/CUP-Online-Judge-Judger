@@ -6,9 +6,11 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <stdexcept>
 #include "utils.h"
 
 const unsigned BUFFER_SIZE = 1 << 20;

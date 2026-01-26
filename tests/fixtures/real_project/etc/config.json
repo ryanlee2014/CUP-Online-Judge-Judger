@@ -1,0 +1,1 @@
+{"hostname":"localhost","username":"u","password":"p","dbName":"jol","port":3306,"java_time_bonus":2,"java_memory_bonus":0,"java_xms":"-Xms64M","java_xmx":"-Xmx512M","http_judge":"0","http_username":"h","http_password":"p","all_test_mode":1,"full_diff":0,"share_memory_run":0,"use_max_time":1,"use_ptrace":0}

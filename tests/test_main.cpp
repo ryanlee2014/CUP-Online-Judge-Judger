@@ -267,6 +267,21 @@ static std::string read_file(const std::filesystem::path &path) {
     return ss.str();
 }
 
+static void copy_tree(const std::filesystem::path &src, const std::filesystem::path &dst) {
+    std::filesystem::create_directories(dst);
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(src)) {
+        auto rel = std::filesystem::relative(entry.path(), src);
+        auto target = dst / rel;
+        if (entry.is_directory()) {
+            std::filesystem::create_directories(target);
+        } else if (entry.is_regular_file()) {
+            std::filesystem::create_directories(target.parent_path());
+            std::filesystem::copy_file(entry.path(), target,
+                                       std::filesystem::copy_options::overwrite_existing);
+        }
+    }
+}
+
 static void expect_exit(const std::function<void()> &fn, int code) {
     try {
         fn();
@@ -565,6 +580,57 @@ TEST(ConfigInfoReadFile) {
     EXPECT_EQ(cfg.getHostname(), "h");
     EXPECT_EQ(cfg.getUserName(), "u");
     EXPECT_EQ(cfg.getPassword(), "p");
+}
+
+TEST(RealProjectFlow) {
+    TempDir tmp;
+    auto fixture_root = std::filesystem::path(__FILE__).parent_path()
+                        / "fixtures" / "real_project";
+    copy_tree(fixture_root, tmp.path);
+
+    ConfigInfo cfg;
+    auto config_path = tmp.path / "etc" / "config.json";
+    auto config_str = config_path.string();
+    cfg.readFromFile(config_str);
+    EXPECT_EQ(cfg.getHostname(), "localhost");
+    EXPECT_EQ(cfg.getUserName(), "u");
+    EXPECT_EQ(cfg.getPassword(), "p");
+    EXPECT_EQ(cfg.getDbName(), "jol");
+    EXPECT_EQ(cfg.getPort(), 3306);
+    EXPECT_EQ(cfg.getJavaTimeBonus(), 2);
+    EXPECT_EQ(cfg.getJavaMemoryBonus(), 0);
+    EXPECT_EQ(cfg.getAllTestMode(), 1);
+    EXPECT_EQ(cfg.getFullDiff(), 0);
+    EXPECT_EQ(cfg.getShareMemoryRun(), 0);
+    EXPECT_EQ(cfg.getUseMaxTime(), 1);
+    EXPECT_EQ(cfg.getUsePtrace(), 0);
+
+    SubmissionInfo info;
+    auto submission_path = tmp.path / "submission" / "1001.json";
+    auto submission_str = submission_path.string();
+    info.readFromFile(submission_str);
+    EXPECT_EQ(info.getLanguage(), 0);
+    EXPECT_EQ(info.getUserId(), "u");
+    EXPECT_EQ(info.getProblemId(), 1001);
+    EXPECT_EQ(info.getSpecialJudge(), false);
+    EXPECT_EQ(info.getMemoryLimit(), 64);
+    EXPECT_EQ(info.getTimeLimit(), 1.0);
+    EXPECT_EQ(info.getSource(), "code");
+    EXPECT_EQ(info.getSolutionId(), 1);
+
+    auto old_cwd = std::filesystem::current_path();
+    std::filesystem::current_path(tmp.path);
+    auto ans = tmp.path / "data" / "1001" / "1.out";
+    auto user = tmp.path / "run1" / "user.out";
+    auto user_pe = tmp.path / "run1" / "user_pe.out";
+    auto user_wa = tmp.path / "run1" / "user_wa.out";
+    int res_ac = compare_zoj(ans.string().c_str(), user.string().c_str(), 0, 0);
+    EXPECT_EQ(res_ac, ACCEPT);
+    int res_pe = compare_zoj(ans.string().c_str(), user_pe.string().c_str(), 0, 0);
+    EXPECT_TRUE(res_pe == PRESENTATION_ERROR || res_pe == ACCEPT);
+    int res_wa = compare_zoj(ans.string().c_str(), user_wa.string().c_str(), 0, 0);
+    EXPECT_EQ(res_wa, WRONG_ANSWER);
+    std::filesystem::current_path(old_cwd);
 }
 
 TEST(InitMysqlConfFromConfig) {
