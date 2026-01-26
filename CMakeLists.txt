@@ -104,3 +104,14 @@ if (ENABLE_TESTS)
     endif ()
     add_test(NAME judge_tests COMMAND judge_tests)
 endif ()
+
+option(ENABLE_REAL_TESTS "Build real compile/run tests" OFF)
+if (ENABLE_REAL_TESTS)
+    add_executable(judge_real_tests
+        tests/real_compile_run.cpp
+        external/compare/Compare.cpp
+        external/compare/CompareImpl.cpp
+        external/compare/utils/utils.cpp
+    )
+    target_link_libraries(judge_real_tests ${CMAKE_THREAD_LIBS_INIT})
+endif ()

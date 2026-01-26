@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -21,3 +24,12 @@ jobs:
       - name: Run unit tests
         run: |
           ./judge_tests
+      - name: Build real compile/run tests
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          cmake -DENABLE_TESTS=ON -DENABLE_REAL_TESTS=ON .
+          make -j$(nproc) judge_real_tests
+      - name: Run real compile/run tests
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          ./judge_real_tests
