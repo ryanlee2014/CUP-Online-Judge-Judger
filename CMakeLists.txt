@@ -112,6 +112,7 @@ if (ENABLE_REAL_TESTS)
         external/compare/Compare.cpp
         external/compare/CompareImpl.cpp
         external/compare/utils/utils.cpp
+        model/judge/language/common/seccomp_helper.cpp
     )
     target_link_libraries(judge_real_tests ${CMAKE_THREAD_LIBS_INIT})
 endif ()
