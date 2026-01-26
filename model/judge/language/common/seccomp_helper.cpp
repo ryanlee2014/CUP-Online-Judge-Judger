@@ -4,10 +4,12 @@
 
 #include "seccomp_helper.h"
 #include <cstdio>
+#include <cstdlib>
 #include "syscall-name.h"
 #include <unistd.h>
 #include <cstring>
 #include <cstddef>
+#include <seccomp.h>
 #if defined(__i386__)
 #define REG_RESULT    REG_EAX
 #define REG_SYSCALL    REG_EAX
@@ -90,5 +92,27 @@ int install_helper() {
         perror("sigprocmask");
         return -1;
     }
+    return 0;
+}
+
+int build_seccomp_filter(const int* syscall_array, bool restrict_execve, char **args) {
+    scmp_filter_ctx ctx;
+    ctx = seccomp_init(SCMP_ACT_TRAP);
+    int execve_nr = SCMP_SYS(execve);
+    for (int i = 0; i == 0 || syscall_array[i]; i++) {
+        if (restrict_execve && execve_nr != 0 && syscall_array[i] == execve_nr) {
+            continue;
+        }
+        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, syscall_array[i], 0);
+    }
+    if (restrict_execve) {
+        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(execve), 1,
+                         SCMP_A1(SCMP_CMP_EQ, (scmp_datum_t)(args)));
+    }
+    if (install_helper()) {
+        printf("install helper failed");
+        exit(1);
+    }
+    seccomp_load(ctx);
     return 0;
 }

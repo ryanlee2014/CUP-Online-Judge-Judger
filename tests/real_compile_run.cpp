@@ -9,12 +9,23 @@
 #include <ucontext.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
+#include <sys/socket.h>
 
 #include "../external/compare/CompareImpl.h"
 #include "../header/static_var.h"
 #include "../library/judge_lib.h"
 #include "../model/judge/language/common/seccomp_helper.h"
 #include <seccomp.h>
+#ifdef __i386
+#include "../model/judge/language/syscall/c11/syscall32.h"
+#undef JUDGE_LIBRARY_SYSCALL32_H
+#include "../model/judge/language/syscall/python3/syscall32.h"
+#else
+#include "../model/judge/language/syscall/c11/syscall64.h"
+#undef JUDGE_LIBRARY_SYSCALL64_H
+#include "../model/judge/language/syscall/python3/syscall64.h"
+#endif
 
 int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff);
 
@@ -202,6 +213,56 @@ static int run_seccomp_action_case(uint32_t action) {
     return 0;
 }
 
+static bool attempt_blocked_syscall() {
+#if defined(SYS_socket)
+    syscall(SYS_socket, AF_INET, SOCK_STREAM, 0);
+    return true;
+#elif defined(SYS_ptrace)
+    syscall(SYS_ptrace, 0, 0, 0, 0);
+    return true;
+#elif defined(SYS_clone)
+    syscall(SYS_clone, 0, 0, 0, 0, 0);
+    return true;
+#else
+    return false;
+#endif
+}
+
+static int run_blocked_syscall_case(const int* syscalls, bool restrict_execve, const char* name) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        char *args[] = {const_cast<char *>("prog"), nullptr};
+        build_seccomp_filter(syscalls, restrict_execve, restrict_execve ? args : nullptr);
+        if (!attempt_blocked_syscall()) {
+            _exit(0);
+        }
+        _exit(2);
+    }
+    if (pid < 0) {
+        std::cerr << "fork failed (" << name << " blocked syscall)" << std::endl;
+        return 13;
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        std::cerr << "waitpid failed (" << name << " blocked syscall)" << std::endl;
+        return 14;
+    }
+    if (WIFEXITED(status)) {
+        int code = WEXITSTATUS(status);
+        if (code == 1 || code == 0) {
+            return 0;
+        }
+        std::cerr << name << " blocked syscall exit code=" << code << std::endl;
+        return 15;
+    }
+    if (WIFSIGNALED(status)) {
+        std::cerr << name << " blocked syscall signaled=" << WTERMSIG(status) << std::endl;
+        return 16;
+    }
+    std::cerr << name << " blocked syscall status=" << status << std::endl;
+    return 17;
+}
+
 int main() {
     auto root = make_temp_dir();
     int rc = run_basic_end_to_end(root);
@@ -216,6 +277,16 @@ int main() {
         int trap_rc = run_seccomp_action_case(SCMP_ACT_TRAP);
         if (kill_rc != 0 || trap_rc != 0) {
             rc = 12;
+        }
+    }
+    if (rc == 0) {
+        int c11_rc = run_blocked_syscall_case(LANG_CV, true, "c11");
+        int py3_rc = 0;
+#ifdef LANG_PY3V
+        py3_rc = run_blocked_syscall_case(LANG_PY3V, false, "python3");
+#endif
+        if (c11_rc != 0 || py3_rc != 0) {
+            rc = 13;
         }
     }
     std::error_code ec;

@@ -1362,6 +1362,13 @@ TEST(SeccompHelperCoverage) {
     EXPECT_EQ(install_helper(), 0);
 }
 
+TEST(SeccompHelperBuildFilter) {
+    int syscalls[] = {1, 2, 0};
+    char *args[] = {const_cast<char *>("prog"), nullptr};
+    EXPECT_EQ(build_seccomp_filter(syscalls, true, args), 0);
+    EXPECT_EQ(build_seccomp_filter(syscalls, false, nullptr), 0);
+}
+
 struct DummyLanguage : Language {
     void run(int memory) override {
         (void)memory;

@@ -90,16 +90,7 @@ int Schema::getMemory(rusage ruse, pid_t pid) {
 }
 
 void Schema::buildSeccompSandbox() {
-    scmp_filter_ctx ctx;
-    ctx = seccomp_init(SCMP_ACT_TRAP);
-    for (int i = 0; i == 0 || SYSCALL_ARRAY[i]; i++) {
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SYSCALL_ARRAY[i], 0);
-    }
-    if (install_helper()) {
-        printf("install helper failed");
-        exit(1);
-    }
-    seccomp_load(ctx);
+    build_seccomp_filter(SYSCALL_ARRAY, false, nullptr);
 }
 
 char **Schema::getArgs() {

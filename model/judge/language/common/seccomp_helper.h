@@ -5,4 +5,5 @@
 extern void write_uint(char *buf, unsigned int val);
 extern void helper(int nr, siginfo_t *info, void *void_context);
 extern int install_helper();
+extern int build_seccomp_filter(const int* syscall_array, bool restrict_execve, char **args);
 #endif
