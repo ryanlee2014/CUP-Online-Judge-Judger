@@ -14,6 +14,7 @@
 #include "../header/static_var.h"
 #include "../library/judge_lib.h"
 #include "../model/judge/language/common/seccomp_helper.h"
+#include <seccomp.h>
 
 int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff);
 
@@ -147,9 +148,56 @@ static int run_illegal_syscall_case() {
         std::cerr << "waitpid failed (illegal syscall)" << std::endl;
         return 8;
     }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 1) {
-        std::cerr << "illegal syscall exit status=" << status << std::endl;
+    if (WIFEXITED(status)) {
+        if (WEXITSTATUS(status) != 1) {
+            std::cerr << "illegal syscall exit code=" << WEXITSTATUS(status) << std::endl;
+            return 9;
+        }
+    } else if (WIFSIGNALED(status)) {
+        return 0;
+    } else {
+        std::cerr << "illegal syscall status=" << status << std::endl;
         return 9;
+    }
+    return 0;
+}
+
+static int run_seccomp_action_case(uint32_t action) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (install_helper()) {
+            _exit(3);
+        }
+        scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_ALLOW);
+        if (!ctx) _exit(4);
+        if (seccomp_rule_add(ctx, action, SCMP_SYS(getpid), 0) != 0) _exit(5);
+        if (seccomp_load(ctx) != 0) _exit(6);
+        volatile int x = getpid();
+        (void)x;
+        _exit(0);
+    }
+    if (pid < 0) {
+        std::cerr << "fork failed (seccomp action)" << std::endl;
+        return 10;
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        std::cerr << "waitpid failed (seccomp action)" << std::endl;
+        return 11;
+    }
+    if (action == SCMP_ACT_TRAP) {
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 1) {
+            return 0;
+        }
+        if (WIFSIGNALED(status)) {
+            return 1;
+        }
+        return 1;
+    } else if (action == SCMP_ACT_KILL) {
+        if (WIFSIGNALED(status)) {
+            return 0;
+        }
+        return 1;
     }
     return 0;
 }
@@ -162,6 +210,13 @@ int main() {
     }
     if (rc == 0) {
         rc = run_illegal_syscall_case();
+    }
+    if (rc == 0) {
+        int kill_rc = run_seccomp_action_case(SCMP_ACT_KILL);
+        int trap_rc = run_seccomp_action_case(SCMP_ACT_TRAP);
+        if (kill_rc != 0 || trap_rc != 0) {
+            rc = 12;
+        }
     }
     std::error_code ec;
     std::filesystem::remove_all(root, ec);

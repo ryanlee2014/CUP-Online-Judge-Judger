@@ -129,7 +129,7 @@ int Objc::getMemory(rusage ruse, pid_t pid) {
 
 void Objc::buildSeccompSandbox() {
     scmp_filter_ctx ctx;
-    ctx = seccomp_init(SCMP_ACT_KILL);
+    ctx = seccomp_init(SCMP_ACT_TRAP);
     for (int i = 0; i == 0 || SYSCALL_ARRAY[i]; i++) {
         if (SYSCALL_ARRAY[i] == 59) {
             continue;
