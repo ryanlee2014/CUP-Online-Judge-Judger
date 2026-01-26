@@ -60,6 +60,9 @@
 /judge_tests
 /wsjudged
 
+!tests/fixtures/**
+!tests/fixtures/**/*.out
+
 .idea
 /**/.idea/**
 .vscode/settings.json
