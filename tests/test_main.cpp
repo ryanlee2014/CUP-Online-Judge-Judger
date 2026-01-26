@@ -267,6 +267,24 @@ static std::string read_file(const std::filesystem::path &path) {
     return ss.str();
 }
 
+static void normalize_file_eol(const std::filesystem::path &path) {
+    auto content = read_file(path);
+    std::string out;
+    out.reserve(content.size());
+    for (size_t i = 0; i < content.size(); ++i) {
+        char c = content[i];
+        if (c == '\r') {
+            if (i + 1 < content.size() && content[i + 1] == '\n') {
+                ++i;
+            }
+            out.push_back('\n');
+        } else {
+            out.push_back(c);
+        }
+    }
+    write_file(path, out);
+}
+
 static void copy_tree(const std::filesystem::path &src, const std::filesystem::path &dst) {
     std::filesystem::create_directories(dst);
     for (const auto &entry : std::filesystem::recursive_directory_iterator(src)) {
@@ -624,6 +642,10 @@ TEST(RealProjectFlow) {
     auto user = tmp.path / "run1" / "user.out";
     auto user_pe = tmp.path / "run1" / "user_pe.out";
     auto user_wa = tmp.path / "run1" / "user_wa.out";
+    normalize_file_eol(ans);
+    normalize_file_eol(user);
+    normalize_file_eol(user_pe);
+    normalize_file_eol(user_wa);
     int res_ac = compare_zoj(ans.string().c_str(), user.string().c_str(), 0, 0);
     EXPECT_EQ(res_ac, ACCEPT);
     int res_pe = compare_zoj(ans.string().c_str(), user_pe.string().c_str(), 0, 0);
