@@ -21,9 +21,21 @@ jobs:
       - name: Compile source code test
         run: |
           ./shell/build_test_ci.sh
-      - name: Run unit tests
+      - name: Build and run unit tests with coverage
         run: |
+          cmake -DENABLE_TESTS=ON -DENABLE_COVERAGE=ON .
+          make -j$(nproc) judge_tests
           ./judge_tests
+      - name: Generate coverage report
+        run: |
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/tests/*' '*/external/*' --output-file coverage.info
+          genhtml coverage.info --output-directory coverage_html
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage_html
       - name: Build real compile/run tests
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |

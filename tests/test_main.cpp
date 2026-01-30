@@ -72,6 +72,7 @@
 #endif
 
 extern "C" void __gcov_flush(void) __attribute__((weak));
+extern "C" void __gcov_exit(void) __attribute__((weak));
 
 int judge_client_main(int argc, char **argv);
 int wsjudged_main(int argc, const char **argv);
@@ -2462,6 +2463,28 @@ TEST(JudgeClientInitParameters) {
     READ_FROM_STDIN = false;
 }
 
+TEST(JudgeClientInitParametersOldPathRecordCall) {
+    int sid = 0;
+    int rid = 0;
+    std::string jid;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    const char *argv1[] = {"judge_client", "1", "2", root.c_str(), "x", "cpp"};
+    int argc1 = sizeof(argv1) / sizeof(argv1[0]);
+    init_parameters(argc1, const_cast<char **>(argv1), sid, rid, jid);
+    EXPECT_EQ(sid, 1);
+    EXPECT_EQ(rid, 2);
+    EXPECT_TRUE(record_call);
+    EXPECT_EQ(std::string(oj_home), root);
+    EXPECT_EQ(std::string(LANG_NAME), "cpp");
+    record_call = 0;
+    const char *argv2[] = {"judge_client", "1", "2"};
+    int argc2 = sizeof(argv2) / sizeof(argv2[0]);
+    init_parameters(argc2, const_cast<char **>(argv2), sid, rid, jid);
+    EXPECT_EQ(std::string(oj_home), "/home/judge");
+    DEBUG = 0;
+}
+
 TEST(JudgeClientPrintCallArray) {
     TempDir tmp;
     std::string root = tmp.path.string();
@@ -2748,6 +2771,64 @@ TEST(JudgeClientWatchSolutionKilledDebug) {
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()));
     DEBUG = 0;
     ALL_TEST_MODE = 1;
+    std::filesystem::current_path(old_cwd);
+}
+
+TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
+    test_hooks::reset();
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    std::strcpy(oj_home, root.c_str());
+    languageNameReader.loadJSON("{\"0\":\"fake\"}");
+    auto old_cwd = std::filesystem::current_path();
+    std::filesystem::current_path(tmp.path);
+    std::string user_path = (tmp.path / "user.out").string();
+    std::string out_path = (tmp.path / "out.out").string();
+    write_file(user_path, "1");
+    write_file(out_path, "1");
+    write_file(tmp.path / "error.out", "Killed");
+    char infile[] = "in";
+    int lang = 0;
+    int p_id = 1;
+    int pe = 0;
+    double used = 0;
+    double tl = 1.0;
+    int mem = 64;
+    int top = 0;
+    int ac = ACCEPT;
+    use_ptrace = 0;
+    test_hooks::state().wait4_status = 0x7f;
+    watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
+                   const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+    EXPECT_TRUE(read_file(tmp.path / "error.out").find("Runtime Error:") != std::string::npos);
+
+    write_file(tmp.path / "error.out", "");
+    ac = ACCEPT;
+    top = 0;
+    test_hooks::state().wait4_status = (SIGALRM << 8) | 0x7f;
+    watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
+                   const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+    EXPECT_EQ(ac, TIME_LIMIT_EXCEEDED);
+
+    write_file(tmp.path / "error.out", "");
+    ac = ACCEPT;
+    top = 0;
+    test_hooks::state().wait4_status = (SIGXFSZ << 8) | 0x7f;
+    watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
+                   const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+    EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
+
+    write_file(tmp.path / "error.out", "");
+    ac = ACCEPT;
+    top = 0;
+    test_hooks::state().wait4_status = (SIGILL << 8) | 0x7f;
+    watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
+                   const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+    EXPECT_EQ(ac, RUNTIME_ERROR);
     std::filesystem::current_path(old_cwd);
 }
 
@@ -3373,6 +3454,43 @@ TEST(JudgeClientTestRun) {
     }
 }
 
+TEST(JudgeClientRuntimeInfoBranches) {
+    test_hooks::reset();
+    test_hooks::state().compile_result = 0;
+    test_hooks::state().compare_result = WRONG_ANSWER;
+    TempDir tmp;
+    write_basic_config(tmp.path, false, false);
+    write_submission(tmp.path, "t5", 1001, false);
+    prepare_case_files(tmp.path, 1001);
+    prepare_run_dir(tmp.path, 1, false);
+    std::string root = tmp.path.string();
+    const char *argv1[] = {
+        "judge_client",
+        "-solution_id", "1",
+        "-runner_id", "1",
+        "-dir", root.c_str(),
+        "-judger_id", "t5",
+        "-no-mysql",
+    };
+    int argc1 = sizeof(argv1) / sizeof(argv1[0]);
+    int rc = judge_client_main(argc1, const_cast<char **>(argv1));
+    EXPECT_EQ(rc, 0);
+
+    test_hooks::state().compare_result = RUNTIME_ERROR;
+    write_submission(tmp.path, "t6", 1001, false);
+    const char *argv2[] = {
+        "judge_client",
+        "-solution_id", "1",
+        "-runner_id", "1",
+        "-dir", root.c_str(),
+        "-judger_id", "t6",
+        "-no-mysql",
+    };
+    int argc2 = sizeof(argv2) / sizeof(argv2[0]);
+    rc = judge_client_main(argc2, const_cast<char **>(argv2));
+    EXPECT_EQ(rc, 0);
+}
+
 TEST(WSJudgedBasics) {
     test_hooks::reset();
     const char *argv1[] = {"wsjudged"};
@@ -3413,7 +3531,9 @@ int main() {
             std::cout << "[FAIL] " << t.name << ": " << e.what() << "\n";
         }
     }
-    if (__gcov_flush) {
+    if (__gcov_exit) {
+        __gcov_exit();
+    } else if (__gcov_flush) {
         __gcov_flush();
     }
     if (failed) {

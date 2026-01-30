@@ -41,7 +41,7 @@ public:
 
     Bundle& setJudgerId(string &);
 
-    Bundle& setTestRunResult(string &);
+    Bundle& setTestRunResult(const string &);
 
     Bundle& setCompileInfo(string &);
 
@@ -68,7 +68,7 @@ private:
 
     string trim(string &);
 
-    string checkUTF8Valid(string &);
+    string checkUTF8Valid(const string &);
 
     Pack &get(const string&);
 

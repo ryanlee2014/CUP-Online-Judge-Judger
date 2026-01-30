@@ -97,7 +97,6 @@ runJudgeTask(int runner_id, int language, char *work_dir, pair<string, int> &inf
 
 //static int sleep_tmp;
 int call_counter[call_array_size];
-static char LANG_NAME[BUFFER_SIZE];
 
 // read the configue file
 void init_mysql_conf() {
@@ -235,6 +234,18 @@ static void configure_and_run(shared_ptr<Language> &languageModel, char *work_di
     languageModel->run(mem_lmt);
     fflush(stderr);
     exit(0);
+}
+
+static void run_solution_common(int &lang, char *work_dir, double &time_lmt, double &usedtime,
+                                int &mem_lmt, const char *inputFile, const char *userOutputFile,
+                                const char *errorOutputFile, double mem_cur_factor, double mem_max_factor) {
+    shared_ptr<Language> languageModel(getLanguageModel(lang));
+    nice(19);
+    chdir(work_dir);
+    freopen(inputFile, "r", stdin);
+    freopen(userOutputFile, "w", stdout);
+    freopen(errorOutputFile, "a+", stderr);
+    configure_and_run(languageModel, work_dir, time_lmt, usedtime, mem_lmt, mem_cur_factor, mem_max_factor);
 }
 
 static bool handle_error_conditions(shared_ptr<Language> &languageModel, const char *errorFile, int &ACflg,
@@ -412,6 +423,83 @@ static bool process_watch_iteration(pid_t pidApp, int &status, struct rusage &ru
     return false;
 }
 
+static void watch_solution_common(pid_t pidApp, char *infile, int &ACflg, int isspj,
+                                  char *userfile, char *outfile, int solution_id, int lang,
+                                  int &topmemory, int mem_lmt, double &usedtime,
+                                  const char *errorFile, int *call_counter_local) {
+    shared_ptr<Language> languageModel(getLanguageModel(lang));
+    if (DEBUG) {
+        printf("pid=%d judging %s\n", pidApp, infile);
+    }
+    int status;
+    struct rusage ruse{};
+    if (topmemory == 0) {
+        topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
+    }
+    while (true) {
+        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, isspj,
+                                    userfile, outfile, errorFile, solution_id, call_counter_local)) {
+            break;
+        }
+    }
+    add_usedtime(usedtime, ruse);
+}
+
+static void send_running_bundle(int solution_id, int total_point, bool include_total) {
+    bundle.setJudger(http_username);
+    bundle.setSolutionID(solution_id);
+    bundle.setResult(RUNNING_JUDGING);
+    if (include_total) {
+        bundle.setTotalPoint(total_point);
+    }
+    webSocket << bundle.toJSONString();
+}
+
+static string build_test_run_output(int ACflg, double &usedtime, double timeLimit, int solution_id) {
+    string error_message;
+    if (ACflg == TIME_LIMIT_EXCEEDED) {
+        usedtime = timeLimit * 1000;
+        error_message = "Time Limit Exceeded.Kill Process.\n";
+    } else if (ACflg == RUNTIME_ERROR) {
+        if (DEBUG)
+            printf("add RE info of %d..... \n", solution_id);
+        error_message = "Runtime Error. Kill Process.\n";
+    } else if (ACflg == MEMORY_LIMIT_EXCEEDED) {
+        error_message = "Memory Limit Exceeded.Kill Process.\n";
+    }
+    string test_run_out;
+    if (ACflg == ACCEPT) {
+        test_run_out = getRuntimeInfoContents("user.out");
+    } else {
+        test_run_out = error_message;
+    }
+    if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
+        auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
+        test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
+        test_run_out += "\n......Omit " + omit + " characters.";
+    }
+    if (DEBUG) {
+        cout << "test_run_out:" << endl << test_run_out << endl;
+    }
+    if (usedtime == timeLimit * 1000) {
+        test_run_out += "\n测试运行中发生运行超时，程序被强制停止";
+    }
+    return test_run_out;
+}
+
+static void send_test_run_bundle(int solution_id, double usedtime, int topmemory, const string &test_run_out) {
+    bundle.clear();
+    bundle.setSolutionID(solution_id);
+    bundle.setResult(TEST_RUN);
+    bundle.setFinished(FINISHED);
+    bundle.setUsedTime(usedtime);
+    bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
+    bundle.setPassPoint(ZERO_PASSPOINT);
+    bundle.setPassRate(ZERO_PASSRATE);
+    bundle.setTestRunResult(test_run_out);
+    webSocket << bundle.toJSONString();
+}
+
 static void prepare_run_files_with_id(int language, int runner_id, const pair<string, int> &infilePair, int problemId,
                                       char *work_dir, int num_of_test, int call_counter_local[call_array_size],
                                       char *infile, char *outfile, char *userfile) {
@@ -456,36 +544,16 @@ static void update_series_result(JudgeSeriesResult &finalResult, const JudgeResu
 
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                            int &mem_lmt, int fileId) {
-    shared_ptr<Language> languageModel(getLanguageModel(lang));
     char input[BUFFER_SIZE], userOutput[BUFFER_SIZE], errorOutput[BUFFER_SIZE];
     sprintf(input, "data%d.in", fileId);
     sprintf(userOutput, "user%d.out", fileId);
     sprintf(errorOutput, "error%d.out", fileId);
-    nice(19);
-    // now the user is "judger"
-    chdir(work_dir);
-    // open the files
-    freopen(input, "r", stdin);
-    freopen(userOutput, "w", stdout);
-    freopen(errorOutput, "a+", stderr);
-    configure_and_run(languageModel, work_dir, time_lmt, usedtime, mem_lmt, 1.0, 1.0);
+    run_solution_common(lang, work_dir, time_lmt, usedtime, mem_lmt, input, userOutput, errorOutput, 1.0, 1.0);
 }
 
 void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                   int &mem_lmt) {
-    shared_ptr<Language> languageModel(getLanguageModel(lang));
-    nice(19);
-    // now the user is "judger"
-    chdir(work_dir);
-    // open the files
-    freopen("data.in", "r", stdin);
-    //if(!DEBUG)
-    //{
-    freopen("user.out", "w", stdout);
-    freopen("error.out", "a+", stderr);
-
-    //}
-    configure_and_run(languageModel, work_dir, time_lmt, usedtime, mem_lmt, 1.5, 2.0);
+    run_solution_common(lang, work_dir, time_lmt, usedtime, mem_lmt, "data.in", "user.out", "error.out", 1.5, 2.0);
 }
 
 JudgeResult judge_solution(int &ACflg, double &usedtime, double time_lmt, int isspj,
@@ -537,53 +605,18 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
                     char *userfile, char *outfile, int solution_id, int lang,
                     int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
                     int &PEflg, char *work_dir) {
-    // parent
-    shared_ptr<Language> languageModel(getLanguageModel(lang));
-    if (DEBUG) {
-        printf("pid=%d judging %s\n", pidApp, infile);
-    }
-    int status;
-    struct rusage ruse{};
-    if (topmemory == 0)
-        topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
-    while (true) {
-        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, isspj,
-                                    userfile, outfile, "error.out", solution_id, call_counter)) {
-            break;
-        }
-    }
-
-    add_usedtime(usedtime, ruse);
-
-    //clean_session(pidApp);
+    watch_solution_common(pidApp, infile, ACflg, isspj, userfile, outfile, solution_id, lang, topmemory, mem_lmt,
+                          usedtime, "error.out", call_counter);
 }
 
 void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int isspj,
                                  char *userfile, char *outfile, int solution_id, int lang,
                                  int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
                                  int &PEflg, char *work_dir, int file_id, int* call_counter) {
-    // parent
     char errorFile[BUFFER_SIZE];
     sprintf(errorFile, "error%d.out", file_id);
-    shared_ptr<Language> languageModel(getLanguageModel(lang));
-    if (DEBUG) {
-        printf("pid=%d judging %s\n", pidApp, infile);
-    }
-    int status;
-    struct rusage ruse{};
-    if (topmemory == 0) {
-        topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
-    }
-    while (true) {
-        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, isspj,
-                                    userfile, outfile, errorFile, solution_id, call_counter)) {
-            break;
-        }
-    }
-
-    add_usedtime(usedtime, ruse);
-
-    //clean_session(pidApp);
+    watch_solution_common(pidApp, infile, ACflg, isspj, userfile, outfile, solution_id, lang, topmemory, mem_lmt,
+                          usedtime, errorFile, call_counter);
 }
 
 JudgeResult
@@ -863,10 +896,7 @@ int main(int argc, char **argv) {
             getCustomInputFromSubmissionInfo(submissionInfo);
         }
         InitManager::initSyscallLimits(lang, call_counter, record_call, call_array_size);
-        bundle.setJudger(http_username);
-        bundle.setSolutionID(solution_id);
-        bundle.setResult(RUNNING_JUDGING);
-        webSocket << bundle.toJSONString();
+        send_running_bundle(solution_id, 0, false);
         pid_t pidApp = fork();
 
         if (pidApp == CHILD_PROCESS) {
@@ -878,47 +908,8 @@ int main(int argc, char **argv) {
 
         }
         ACflg = languageModel->fixACStatus(ACflg);
-        string error_message;
-        if (ACflg == TIME_LIMIT_EXCEEDED) {
-            usedtime = timeLimit * 1000;
-            error_message = "Time Limit Exceeded.Kill Process.\n";
-        } else if (ACflg == RUNTIME_ERROR) {
-            if (DEBUG)
-                printf("add RE info of %d..... \n", solution_id);
-            error_message = "Runtime Error. Kill Process.\n";
-        } else if (ACflg == MEMORY_LIMIT_EXCEEDED) {
-            error_message = "Memory Limit Exceeded.Kill Process.\n";
-        }
-        string test_run_out;
-        if (ACflg == ACCEPT) {
-            test_run_out = getRuntimeInfoContents("user.out");
-        } else {
-            test_run_out = error_message;
-        }
-
-        if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
-            auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
-            test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
-            test_run_out += "\n......Omit " + omit + " characters.";
-        }
-        if (DEBUG) {
-            cout << "test_run_out:" << endl << test_run_out << endl;
-        }
-
-        if (usedtime == timeLimit * 1000) {
-            test_run_out += "\n测试运行中发生运行超时，程序被强制停止";
-        }
-
-        bundle.clear();
-        bundle.setSolutionID(solution_id);
-        bundle.setResult(TEST_RUN);
-        bundle.setFinished(FINISHED);
-        bundle.setUsedTime(usedtime);
-        bundle.setMemoryUse(topmemory / ONE_KILOBYTE);
-        bundle.setPassPoint(ZERO_PASSPOINT);
-        bundle.setPassRate(ZERO_PASSRATE);
-        bundle.setTestRunResult(test_run_out);
-        webSocket << bundle.toJSONString();
+        string test_run_out = build_test_run_output(ACflg, usedtime, timeLimit, solution_id);
+        send_test_run_bundle(solution_id, usedtime, topmemory, test_run_out);
         clean_workdir(work_dir);
         removeSubmissionInfo(judgerId);
         exit(0);
@@ -928,11 +919,7 @@ int main(int argc, char **argv) {
     vector<pair<string, int> > inFileList = getFileList(fullpath, isInFile);
     num_of_test = inFileList.size();
     total_point = inFileList.size();
-    bundle.setJudger(http_username);
-    bundle.setSolutionID(solution_id);
-    bundle.setResult(RUNNING_JUDGING);
-    bundle.setTotalPoint(total_point);
-    webSocket << bundle.toJSONString();
+    send_running_bundle(solution_id, total_point, true);
     if (enable_parallel && languageModel->supportParallel()) {
         auto r = runParallelJudge(runner_id, lang, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
                                   ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo);

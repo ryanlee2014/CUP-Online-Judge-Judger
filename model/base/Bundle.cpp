@@ -77,7 +77,7 @@ Bundle& Bundle::setJudgerId(string &str) {
 }
 
 
-Bundle& Bundle::setTestRunResult(string &test_run_result) {
+Bundle& Bundle::setTestRunResult(const string &test_run_result) {
     setValue("test_run_result", Pack(checkUTF8Valid(test_run_result)));
     return *this;
 }
@@ -113,7 +113,7 @@ string Bundle::trim(string &str) {
     }
 }
 
-string Bundle::checkUTF8Valid(string &str) {
+string Bundle::checkUTF8Valid(const string &str) {
     string copy_str(str);
     if (utf8_check_is_valid(copy_str)) {
         return trim(copy_str);

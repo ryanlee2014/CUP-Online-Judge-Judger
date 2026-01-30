@@ -8,6 +8,7 @@ char user_name[BUFFER_SIZE];
 char password[BUFFER_SIZE];
 char db_name[BUFFER_SIZE];
 char oj_home[BUFFER_SIZE];
+char LANG_NAME[BUFFER_SIZE];
 //static char data_list[BUFFER_SIZE][BUFFER_SIZE];
 //static int data_list_len = 0;
 int DEBUG = 0;

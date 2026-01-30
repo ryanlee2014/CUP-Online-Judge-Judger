@@ -54,6 +54,7 @@
 /lcov_list.txt
 /lcov_low.txt
 /coverage.info
+/coverage_html/
 
 # Build binaries
 /judge_client

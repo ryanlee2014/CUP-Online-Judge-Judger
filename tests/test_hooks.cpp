@@ -3,10 +3,12 @@
 #include <cstdarg>
 #include <cstring>
 #include <cerrno>
+#include <cstdio>
 #include <string>
 #include <sys/ptrace.h>
 #include <unistd.h>
 
+#include "../header/static_var.h"
 #include "../external/compare/Compare.h"
 #include "../external/mysql/MySQLSubmissionAdapter.h"
 #include "../model/judge/language/Language.h"
@@ -184,7 +186,22 @@ public:
     int compare(const char *stdAnswerFile, const char *userOutputFile) override {
         (void)stdAnswerFile;
         (void)userOutputFile;
-        return test_hooks::state().compare_result;
+        int result = test_hooks::state().compare_result;
+        if (result == WRONG_ANSWER || result == PRESENTATION_ERROR) {
+            FILE *fp = fopen("diff.out", "a+");
+            if (fp) {
+                fputs("diff", fp);
+                fclose(fp);
+            }
+        }
+        if (result == RUNTIME_ERROR) {
+            FILE *fp = fopen("error.out", "a+");
+            if (fp) {
+                fputs("Runtime Error", fp);
+                fclose(fp);
+            }
+        }
+        return result;
     }
 };
 

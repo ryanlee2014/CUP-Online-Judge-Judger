@@ -180,6 +180,7 @@ extern char user_name[BUFFER_SIZE];
 extern char password[BUFFER_SIZE];
 extern char db_name[BUFFER_SIZE];
 extern char oj_home[BUFFER_SIZE];
+extern char LANG_NAME[BUFFER_SIZE];
 //extern char data_list[BUFFER_SIZE][BUFFER_SIZE];
 //extern int data_list_len = 0;
 extern int javaTimeBonus;
