@@ -7,6 +7,9 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <sstream>
+#include <unordered_map>
+#include <mutex>
+#include <filesystem>
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -330,26 +333,75 @@ void removeSubmissionInfo(string& uuid) {
     execute_cmd("/bin/rm -rf %s/submission/%s.json", oj_home, uuid.c_str());
 }
 
-vector<pair<string, int> >getFileList(const string& path, const function<int(const char*)>& func) {
+namespace {
+struct DirListCacheEntry {
+    std::filesystem::file_time_type mtime{};
+    vector<pair<string, int>> items;
+    bool has_mtime = false;
+};
+
+int always_true_filter(const char*) {
+    return 1;
+}
+
+bool is_cacheable_filter(const function<int(const char*)> &func) {
+    auto target = func.target<int(*)(const char*)>();
+    if (!target) {
+        return false;
+    }
+    return *target == isInFile || *target == always_true_filter;
+}
+
+vector<pair<string, int>> read_dir_list(const string &path, const function<int(const char*)> &func) {
     auto* dp = opendir(path.c_str());
     dirent* dirp;
     if (dp == nullptr) {
         write_log(oj_home, "No such dir:%s!\n", path.c_str());
         exit(-1);
     }
-    vector<pair<string, int> >inFileList;
-    while((dirp = readdir(dp)) != nullptr) {
+    vector<pair<string, int>> inFileList;
+    while ((dirp = readdir(dp)) != nullptr) {
         auto fileLen = func(dirp->d_name);
-        if(fileLen) {
+        if (fileLen) {
             inFileList.emplace_back(dirp->d_name, fileLen);
         }
     }
+    closedir(dp);
     return inFileList;
+}
+}
+
+vector<pair<string, int> >getFileList(const string& path, const function<int(const char*)>& func) {
+    if (!is_cacheable_filter(func)) {
+        return read_dir_list(path, func);
+    }
+    static std::mutex cache_mutex;
+    static std::unordered_map<string, DirListCacheEntry> cache;
+    std::error_code ec;
+    auto mtime = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return read_dir_list(path, func);
+    }
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        auto it = cache.find(path);
+        if (it != cache.end() && it->second.has_mtime && it->second.mtime == mtime) {
+            return it->second.items;
+        }
+    }
+    auto items = read_dir_list(path, func);
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        auto &entry = cache[path];
+        entry.items = items;
+        entry.mtime = mtime;
+        entry.has_mtime = true;
+    }
+    return items;
 }
 
 vector<pair<string, int> >getFileList(const string& path) {
-    auto func = [&](const char*) -> int{return 1;};
-    return getFileList(path, func);
+    return getFileList(path, always_true_filter);
 }
 
 
@@ -403,12 +455,90 @@ int get_sim(int solution_id, int lang, int pid, int &sim_s_id) {
     return sim;
 }
 
+int get_sim(int solution_id, int lang, int pid, int &sim_s_id, const char *work_dir) {
+    if (no_sim) {
+        return 0;
+    }
+    shared_ptr<Language> languageModel(getLanguageModel(lang));
+    auto src_path = (std::filesystem::path(work_dir) /
+                     (std::string("Main.") + languageModel->getFileSuffix())).string();
+    if (DEBUG) {
+        cout << "get sim: " << src_path << endl;
+    }
+    int sim = 0;
+    if (!admin) {
+        sim = execute_cmd("/usr/bin/sim.sh %s %d", src_path.c_str(), pid);
+    }
+    if (!sim) {
+        if (DEBUG) {
+            cout << "SIM is not detected!" << endl;
+        }
+        execute_cmd("/bin/mkdir %s/data/%d/ac/", oj_home, pid);
+        execute_cmd("/bin/cp %s %s/data/%d/ac/%d.%s", src_path.c_str(), oj_home, pid, solution_id,
+                    languageModel->getFileSuffix().c_str());
+        string suffix = languageModel->getFileSuffix();
+        if (suffix == "c") {
+            execute_cmd("/bin/ln -s %s/data/%d/ac/%d.%s %s/data/%d/ac/%d.%s", oj_home, pid,
+                        solution_id, "c", oj_home, pid, solution_id, "cc");
+        } else if (suffix == "cc") {
+            execute_cmd("/bin/ln -s %s/data/%d/ac/%d.%s %s/data/%d/ac/%d.%s", oj_home, pid,
+                        solution_id, "cc", oj_home, pid, solution_id, "c");
+        }
+        return 0;
+    }
+    string buf;
+    buf = string("echo \"select `solution_id`, `sim`, `sim_s_id` from solution where solution_id=") +
+          to_string(solution_id) + "\"| mysql -h " + string(host_name) +
+          " -u " + string(user_name) + " -p" + string(password) +
+          " " + string(db_name);
+    FILE *pFile = popen(buf.c_str(), "re");
+    if (!pFile) {
+        return sim;
+    }
+    char buffer[512];
+    char s_id[BUFFER_SIZE];
+    while (fgets(buffer, sizeof(buffer), pFile)) {
+        if (buffer[0] == 0) {
+            continue;
+        }
+        if (sscanf(buffer, "%d %d %d", &solution_id, &sim, &sim_s_id) == 3) {
+            break;
+        }
+    }
+    pclose(pFile);
+    sprintf(s_id, "%d", sim_s_id);
+    sim_s_id = atoi(s_id);
+    return sim;
+}
+
 string getFileContent(const string& file) {
-    string content, tmp;
-    fstream fileStream(file.c_str());
-    stringstream ss;
-    ss << fileStream.rdbuf();
-    return ss.str();
+    FILE *fp = fopen(file.c_str(), "rb");
+    if (!fp) {
+        return "";
+    }
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return "";
+    }
+    long size = ftell(fp);
+    if (size < 0) {
+        fclose(fp);
+        return "";
+    }
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        fclose(fp);
+        return "";
+    }
+    string content;
+    if (size == 0) {
+        fclose(fp);
+        return content;
+    }
+    content.resize(static_cast<size_t>(size));
+    size_t read_size = fread(&content[0], 1, content.size(), fp);
+    fclose(fp);
+    content.resize(read_size);
+    return content;
 }
 
 void mk_shm_workdir(char *work_dir) {
@@ -458,6 +588,49 @@ int get_proc_status(int pid, const char *mark) {
     return ret;
 }
 
+static bool copy_file_fast(const std::string &source, const std::string &target) {
+    std::error_code ec;
+    std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing, ec);
+    return !ec;
+}
+
+static void copy_dic_files(int problem_id, const char *work_dir) {
+    std::error_code ec;
+    auto dic_dir = std::filesystem::path(oj_home) / "data" / std::to_string(problem_id);
+    if (!std::filesystem::exists(dic_dir, ec)) {
+        return;
+    }
+    auto dic_mtime = std::filesystem::last_write_time(dic_dir, ec);
+    if (ec) {
+        return;
+    }
+    const string cache_key = std::filesystem::path(work_dir).string() + "|" + std::to_string(problem_id);
+    {
+        static std::mutex cache_mutex;
+        static std::unordered_map<string, std::filesystem::file_time_type> cache;
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        auto it = cache.find(cache_key);
+        if (it != cache.end() && it->second == dic_mtime) {
+            return;
+        }
+        cache[cache_key] = dic_mtime;
+    }
+    for (const auto &entry : std::filesystem::directory_iterator(dic_dir, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        auto path = entry.path();
+        if (path.extension() != ".dic") {
+            continue;
+        }
+        auto target = std::filesystem::path(work_dir) / path.filename();
+        copy_file_fast(path.string(), target.string());
+    }
+}
+
 void prepare_files(const char *filename, int namelen, char *infile, int &p_id,
                    char *work_dir, char *outfile, char *userfile, int runner_id) {
     //              printf("ACflg=%d %d check a file!\n",ACflg,solution_id);
@@ -468,11 +641,11 @@ void prepare_files(const char *filename, int namelen, char *infile, int &p_id,
     fname0[namelen] = 0;
     escape(fname, fname0);
     printf("%s\n%s\n", fname0, fname);
-    sprintf(infile, "%s/data/%d/%s.in", oj_home, p_id, fname);
-    execute_cmd("/bin/cp '%s' %s/data.in", infile, work_dir);
-    execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
-    sprintf(outfile, "%s/data/%d/%s.out", oj_home, p_id, fname0);
-    sprintf(userfile, "%s/run%d/user.out", oj_home, runner_id);
+    snprintf(infile, BUFFER_SIZE, "%s/data/%d/%s.in", oj_home, p_id, fname);
+    copy_file_fast(infile, (std::filesystem::path(work_dir) / "data.in").string());
+    copy_dic_files(p_id, work_dir);
+    snprintf(outfile, BUFFER_SIZE, "%s/data/%d/%s.out", oj_home, p_id, fname0);
+    snprintf(userfile, BUFFER_SIZE, "%s/run%d/user.out", oj_home, runner_id);
 }
 
 void prepare_files_with_id(const char *filename, int namelen, char *infile, int &p_id,
@@ -485,15 +658,24 @@ void prepare_files_with_id(const char *filename, int namelen, char *infile, int 
     fname0[namelen] = 0;
     escape(fname, fname0);
     printf("%s\n%s\n", fname0, fname);
-    sprintf(infile, "%s/data/%d/%s.in", oj_home, p_id, fname);
-    execute_cmd("/bin/cp '%s' %s/data%d.in", infile, work_dir, file_id);
-    execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
-    sprintf(outfile, "%s/data/%d/%s.out", oj_home, p_id, fname0);
-    sprintf(userfile, "%s/run%d/user%d.out", oj_home, runner_id, file_id);
+    snprintf(infile, BUFFER_SIZE, "%s/data/%d/%s.in", oj_home, p_id, fname);
+    char data_name[BUFFER_SIZE];
+    snprintf(data_name, sizeof(data_name), "data%d.in", file_id);
+    copy_file_fast(infile, (std::filesystem::path(work_dir) / data_name).string());
+    copy_dic_files(p_id, work_dir);
+    snprintf(outfile, BUFFER_SIZE, "%s/data/%d/%s.out", oj_home, p_id, fname0);
+    snprintf(userfile, BUFFER_SIZE, "%s/run%d/user%d.out", oj_home, runner_id, file_id);
 }
 
 void print_runtimeerror(const char *err) {
     FILE *ferr = fopen("error.out", "a+");
+    fprintf(ferr, "Runtime Error:%s\n", err);
+    fclose(ferr);
+}
+
+void print_runtimeerror(const char *err, const char *work_dir) {
+    auto path = (std::filesystem::path(work_dir) / "error.out").string();
+    FILE *ferr = fopen(path.c_str(), "a+");
     fprintf(ferr, "Runtime Error:%s\n", err);
     fclose(ferr);
 }
@@ -520,6 +702,16 @@ void getCustomInputFromSubmissionInfo(SubmissionInfo& submissionInfo) {
     fclose(fp_src);
 }
 
+void getCustomInputFromSubmissionInfo(SubmissionInfo& submissionInfo, const char* work_dir) {
+    if (DEBUG) {
+        cout << submissionInfo.getCustomInput() << endl;
+    }
+    auto path = (std::filesystem::path(work_dir) / "data.in").string();
+    FILE *fp_src = fopen(path.c_str(), "w");
+    fprintf(fp_src, "%s", submissionInfo.getCustomInput().c_str());
+    fclose(fp_src);
+}
+
 
 void getSolutionFromSubmissionInfo(SubmissionInfo& submissionInfo, char* usercode) {
     char src_pth[BUFFER_SIZE];
@@ -535,35 +727,65 @@ void getSolutionFromSubmissionInfo(SubmissionInfo& submissionInfo, char* usercod
     fclose(fp_src);
 }
 
+void getSolutionFromSubmissionInfo(SubmissionInfo& submissionInfo, char* usercode, const char* work_dir) {
+    shared_ptr<Language> languageModel(getLanguageModel(submissionInfo.getLanguage()));
+    sprintf(usercode, "%s", submissionInfo.getSource().c_str());
+    auto path = (std::filesystem::path(work_dir) /
+                 (std::string("Main.") + languageModel->getFileSuffix())).string();
+    if (DEBUG) {
+        printf("Main=%s", path.c_str());
+        cout << usercode << endl;
+    }
+    FILE *fp_src = fopen(path.c_str(), "we");
+    fprintf(fp_src, "%s", usercode);
+    fclose(fp_src);
+}
+
 
 string getRuntimeInfoContents(const string& filename) {
-    char buffer[4096];
     string runtimeInfo;
-    FILE *fp = fopen(filename.c_str(), "re");
-    while (fgets(buffer, 1024, fp)) {
-        runtimeInfo += buffer;
-        if (runtimeInfo.length() > 4096) {
-            break;
-        }
+    FILE *fp = fopen(filename.c_str(), "rb");
+    if (!fp) {
+        return runtimeInfo;
     }
+    constexpr size_t kMaxRead = 5120;
+    runtimeInfo.resize(kMaxRead);
+    size_t read_size = fread(&runtimeInfo[0], 1, kMaxRead, fp);
+    fclose(fp);
+    runtimeInfo.resize(read_size);
     return runtimeInfo;
 }
 
 template<class Instance>
 Instance* getDynamicLibraryInstance (const char* dynamicLibraryPath, const char* createInstanceMethodName) {
-    void* handler = dlopen(dynamicLibraryPath, RTLD_LAZY);
-    if (!handler) {
-        cerr << "Cannot load library: " << dynamicLibraryPath << ": " << dlerror() << endl;
-        exit(1);
+    static std::mutex cache_mutex;
+    static std::unordered_map<std::string, void*> create_cache;
+    static std::unordered_map<std::string, void*> handler_cache;
+    const std::string key = std::string(dynamicLibraryPath) + "|" + createInstanceMethodName;
+    void* create_ptr = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        auto it = create_cache.find(key);
+        if (it != create_cache.end()) {
+            create_ptr = it->second;
+        } else {
+            void* handler = dlopen(dynamicLibraryPath, RTLD_LAZY);
+            if (!handler) {
+                cerr << "Cannot load library: " << dynamicLibraryPath << ": " << dlerror() << endl;
+                exit(1);
+            }
+            dlerror();
+            create_ptr = dlsym(handler, createInstanceMethodName);
+            const char* dlsym_error = dlerror();
+            if (dlsym_error) {
+                cerr << "Cannot load symbol " << createInstanceMethodName << " create: " << dlsym_error << endl;
+                exit(1);
+            }
+            handler_cache.emplace(key, handler);
+            create_cache.emplace(key, create_ptr);
+        }
     }
-    dlerror();
-    Instance* (*createInstance)();
-    createInstance = (Instance *(*)())(dlsym(handler, createInstanceMethodName));
-    const char* dlsym_error = dlerror();
-    if (dlsym_error) {
-        cerr << "Cannot load symbol " << createInstanceMethodName << " create: " << dlsym_error << endl;
-        exit(1);
-    }
+    auto createInstance = reinterpret_cast<Instance* (*)()>(create_ptr);
     return createInstance();
 }
 

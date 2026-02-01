@@ -19,7 +19,7 @@ public:
     Pack(int);
     Pack(double);
     Pack(string);
-    int getInt();
+    int getInt() const;
 
     Pack& setInt(int);
 
@@ -27,19 +27,19 @@ public:
 
     bool increment();
 
-    double getFloat();
+    double getFloat() const;
 
     Pack& setFloat(double);
 
     bool isFloat();
 
-    string& getString();
+    const string& getString() const;
 
     Pack& setString(string);
 
     bool isString();
 
-    int getType();
+    int getType() const;
 
     operator int();
 

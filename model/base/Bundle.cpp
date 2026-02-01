@@ -125,7 +125,7 @@ string Bundle::checkUTF8Valid(const string &str) {
 string Bundle::toJSONString() {
     json JSON;
     JSON["type"] = "judger";
-    for(auto i:_map) {
+    for (const auto &i : _map) {
         try {
             switch (i.second.getType()) {
                 case INT:
@@ -140,7 +140,6 @@ string Bundle::toJSONString() {
                 default:
                     JSON["value"][i.first] = false;
             }
-            JSON.dump();
         }
         catch(type_error& e) {
             JSON["value"][i.first] = e.what();
@@ -191,7 +190,7 @@ bool Bundle::has(const string& key) {
     return this->_map.find(key) != this->_map.end();
 }
 
-Bundle& Bundle::setRuntimeInfo(string& runtime_info) {
+Bundle& Bundle::setRuntimeInfo(const string& runtime_info) {
     setValue("runtime_info", Pack(checkUTF8Valid(runtime_info)));
     return *this;
 }

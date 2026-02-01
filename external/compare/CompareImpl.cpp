@@ -4,9 +4,34 @@
 
 #include "CompareImpl.h"
 #include "utils/utils.h"
+#include <array>
 #include <iostream>
 #include <fstream>
 using namespace std;
+
+class BufferedReader {
+public:
+    explicit BufferedReader(FILE *file) : file_(file), pos_(0), len_(0) {}
+    int get() {
+        if (!file_) {
+            return EOF;
+        }
+        if (pos_ >= len_) {
+            len_ = fread(buffer_.data(), 1, buffer_.size(), file_);
+            pos_ = 0;
+            if (len_ == 0) {
+                return EOF;
+            }
+        }
+        return static_cast<unsigned char>(buffer_[pos_++]);
+    }
+
+private:
+    FILE *file_;
+    std::array<char, 1 << 16> buffer_{};
+    size_t pos_;
+    size_t len_;
+};
 
 
 void make_diff_out_full(FILE *f1, FILE *f2, int c1, int c2, const char *path) {
@@ -52,10 +77,10 @@ bool is_number(const string &s) {
     return true;
 }
 
-void move_to_next_nonspace_character(int &c, FILE *&f, int &ret) {
+void move_to_next_nonspace_character(int &c, BufferedReader &reader, int &ret) {
     while (isspace(c) || iscntrl(c)) {
         do {
-            c = fgetc(f);
+            c = reader.get();
         } while (isspace(c) || iscntrl(c));
     }
 }
@@ -86,32 +111,32 @@ bool check_valid_presentation_error(const char *ansfile, const char *userfile) {
  */
 int choose = 1;
 
-void find_next_nonspace(int &c1, int &c2, FILE *&f1, FILE *&f2, int &ret, int DEBUG) {
+void find_next_nonspace(int &c1, int &c2, BufferedReader &r1, BufferedReader &r2, int &ret, int DEBUG) {
     // Find the next non-space character or \n.
     while ((isspace(c1)) || (isspace(c2))) {
         if (c1 != c2) {
             if (c2 == EOF) {
                 do {
-                    c1 = fgetc(f1);
+                    c1 = r1.get();
                 } while (isspace(c1));
                 continue;
             } else if (c1 == EOF) {
                 do {
-                    c2 = fgetc(f2);
+                    c2 = r2.get();
                 } while (isspace(c2));
                 continue;
 #ifdef IGNORE_ESOL
                 } else if (isspace(c1) && isspace(c2)) {
                 while (c2 == '\n' && isspace(c1) && c1 != '\n')
-                    c1 = fgetc(f1);
+                    c1 = r1.get();
                 while (c1 == '\n' && isspace(c2) && c2 != '\n')
-                    c2 = fgetc(f2);
+                    c2 = r2.get();
 
 #else
             } else if ((c1 == '\r' && c2 == '\n')) {
-                c1 = fgetc(f1);
+                c1 = r1.get();
             } else if ((c2 == '\r' && c1 == '\n')) {
-                c2 = fgetc(f2);
+                c2 = r2.get();
 #endif
             } else {
                 if (DEBUG)
@@ -120,12 +145,23 @@ void find_next_nonspace(int &c1, int &c2, FILE *&f1, FILE *&f2, int &ret, int DE
             }
         }
         if (isspace(c1)) {
-            c1 = fgetc(f1);
+            c1 = r1.get();
         }
         if (isspace(c2)) {
-            c2 = fgetc(f2);
+            c2 = r2.get();
         }
     }
+}
+
+void move_to_next_nonspace_character(int &c, FILE *&f, int &ret) {
+    BufferedReader reader(f);
+    move_to_next_nonspace_character(c, reader, ret);
+}
+
+void find_next_nonspace(int &c1, int &c2, FILE *&f1, FILE *&f2, int &ret, int DEBUG) {
+    BufferedReader r1(f1);
+    BufferedReader r2(f2);
+    find_next_nonspace(c1, c2, r1, r2, ret, DEBUG);
 }
 
 int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff) {
@@ -154,15 +190,26 @@ int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff) 
     FILE *f1, *f2;
     f1 = fopen(file1, "re");
     f2 = fopen(file2, "re");
-    auto judge_file_end_or_detect_presentation_error = [&](int c1, int c2, FILE *&f1, FILE *&f2, int &ret) -> void {
+    if (f1) {
+        setvbuf(f1, nullptr, _IOFBF, 1 << 20);
+    }
+    if (f2) {
+        setvbuf(f2, nullptr, _IOFBF, 1 << 20);
+    }
+    BufferedReader r1(f1);
+    BufferedReader r2(f2);
+    auto judge_file_end_or_detect_presentation_error = [&](int c1, int c2,
+                                                           BufferedReader &reader1,
+                                                           BufferedReader &reader2,
+                                                           int &ret) -> void {
         if (is_not_character(c1) && c1 != EOF) {
             auto temp_ret = ret;
             if (c2 != EOF)
                 ret = PRESENTATION_ERROR;
-            move_to_next_nonspace_character(c1, f1, ret);
+            move_to_next_nonspace_character(c1, reader1, ret);
             if (c1 == EOF) {
                 if (is_not_character(c2)) {
-                    move_to_next_nonspace_character(c2, f2, ret);
+                    move_to_next_nonspace_character(c2, reader2, ret);
                 }
                 if (c2 == EOF) {
                     ret = temp_ret;
@@ -176,9 +223,9 @@ int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff) 
         for (;;) {
             // Find the first non-space character at the beginning of line.
             // Blank lines are skipped.
-            c1 = fgetc(f1);
-            c2 = fgetc(f2);
-            find_next_nonspace(c1, c2, f1, f2, ret, DEBUG);
+            c1 = r1.get();
+            c2 = r2.get();
+            find_next_nonspace(c1, c2, r1, r2, ret, DEBUG);
             // Compare the current line.
             for (;;) {
                 // Read until 2 files return a space or 0 together.
@@ -198,17 +245,17 @@ int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff) 
                         ret = WRONG_ANSWER;
                         goto end;
                     }
-                    c1 = fgetc(f1);
-                    c2 = fgetc(f2);
-                    while (c1 == '\r')c1 = fgetc(f1);
+                    c1 = r1.get();
+                    c2 = r2.get();
+                    while (c1 == '\r')c1 = r1.get();
                     //while(c2 == '\r')c2 = fgetc(f2);
                     if (c1 != c2) {
                         cerr << "c1:" << c1 << " c2:" << c2 << endl;
-                        judge_file_end_or_detect_presentation_error(c1, c2, f1, f2, ret);
-                        judge_file_end_or_detect_presentation_error(c2, c1, f2, f1, ret);
+                        judge_file_end_or_detect_presentation_error(c1, c2, r1, r2, ret);
+                        judge_file_end_or_detect_presentation_error(c2, c1, r2, r1, ret);
                     }
                 }
-                find_next_nonspace(c1, c2, f1, f2, ret, DEBUG);
+                find_next_nonspace(c1, c2, r1, r2, ret, DEBUG);
                 if (c1 == EOF && c2 == EOF) {
                     goto end;
                 }

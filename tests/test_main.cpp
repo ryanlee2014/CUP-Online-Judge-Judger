@@ -22,6 +22,7 @@
 #include "../external/mysql/MySQLAutoPointer.h"
 #include "../external/mysql/MySQLSubmissionInfoManager.h"
 #include "../header/static_var.h"
+#include "../judge_client_context.h"
 #include "../library/judge_lib.h"
 #include "../manager/syscall/InitManager.h"
 #include "../model/base/Bundle.h"
@@ -82,26 +83,30 @@ int compile(int lang, char *work_dir);
 FILE *read_cmd_output(const char *fmt, ...);
 void init_mysql_conf();
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
-                           int &mem_lmt, int fileId);
+                           int &mem_lmt, int fileId, const JudgeConfigSnapshot &config);
 void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
-                  int &mem_lmt);
+                  int &mem_lmt, const JudgeConfigSnapshot &config);
+void run_solution(int &lang, char *work_dir, const double &time_lmt, const double &usedtime,
+                  const int &mem_lmt, const JudgeConfigSnapshot &config);
 void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
                     char *userfile, char *outfile, int solution_id, int lang,
                     int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
-                    int &PEflg, char *work_dir);
+                    int &PEflg, char *work_dir, const JudgeConfigSnapshot &config);
 void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int isspj,
                                  char *userfile, char *outfile, int solution_id, int lang,
                                  int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
-                                 int &PEflg, char *work_dir, int file_id, int *call_counter);
+                                 int &PEflg, char *work_dir, int file_id, int *call_counter,
+                                 const JudgeConfigSnapshot &config);
 JudgeResult runJudgeTask(int runner_id, int language, char *work_dir,
                          std::pair<std::string, int> &infilePair, int ACflg, int SPECIAL_JUDGE,
                          int solution_id, double timeLimit, double usedtime, int memoryLimit,
-                         int problemId, char *usercode, int num_of_test, std::string &global_work_dir);
+                         int problemId, char *usercode, int num_of_test, std::string &global_work_dir,
+                         const JudgeConfigSnapshot &config);
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode,
                                    int timeLimit, int usedtime, int memoryLimit,
                                    std::vector<std::pair<std::string, int>> &inFileList,
                                    int &ACflg, int SPECIAL_JUDGE, std::string &global_work_dir,
-                                   SubmissionInfo &submissionInfo);
+                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config);
 void init_parameters(int argc, char **argv, int &solution_id,
                      int &runner_id, std::string &judgerId);
 void print_call_array();
@@ -110,7 +115,8 @@ extern int choose;
 JudgeResult judge_solution(int &ACflg, double &usedtime, double time_lmt, int isspj,
                            int p_id, char *infile, char *outfile, char *userfile, char *usercode, int &PEflg,
                            int lang, char *work_dir, int &topmemory, int mem_lmt,
-                           int solution_id, int num_of_test, std::string &global_work_dir);
+                           int solution_id, int num_of_test, std::string &global_work_dir,
+                           const JudgeConfigSnapshot &config);
 int compare_zoj(const char *file1, const char *file2, int DEBUG, int full_diff);
 bool is_not_character(int c);
 bool is_number(const std::string &s);
@@ -346,6 +352,19 @@ static bool run_seccomp() {
     return std::strcmp(val, "0") != 0;
 }
 
+static JudgeConfigSnapshot make_config_snapshot() {
+    JudgeConfigSnapshot cfg;
+    cfg.java_time_bonus = javaTimeBonus;
+    cfg.java_memory_bonus = java_memory_bonus;
+    cfg.sim_enable = sim_enable;
+    cfg.share_memory_run = SHARE_MEMORY_RUN;
+    cfg.use_max_time = use_max_time;
+    cfg.use_ptrace = use_ptrace;
+    cfg.all_test_mode = ALL_TEST_MODE;
+    cfg.enable_parallel = enable_parallel;
+    return cfg;
+}
+
 template <typename T>
 static void exercise_seccomp_sandbox(T &lang) {
     lang.buildSeccompSandbox();
@@ -490,6 +509,7 @@ TEST(JudgeLibFiles) {
     auto err = tmp.path / "error.out";
     write_file(err, "err");
     EXPECT_EQ(getRuntimeInfoContents(err.string()), "err");
+    EXPECT_EQ(getRuntimeInfoContents((tmp.path / "missing.out").string()), "");
     auto dir = tmp.path / "data";
     write_file(dir / "1.in", "");
     write_file(dir / "a.txt", "");
@@ -520,12 +540,21 @@ TEST(JudgeLibPrepareFiles) {
     TempDir tmp;
     std::strcpy(oj_home, tmp.path.string().c_str());
     std::string work_dir = tmp.path.string();
+    auto data_dir = tmp.path / "data" / "1";
+    write_file(data_dir / "1.in", "input");
+    write_file(data_dir / "sample.dic", "dic");
     char infile[512], outfile[512], userfile[512];
     int pid = 1;
     prepare_files("1.in", 1, infile, pid,
                   work_dir.data(),
                   outfile, userfile, 2);
     EXPECT_TRUE(std::string(infile).find("/data/") != std::string::npos);
+    EXPECT_EQ(read_file(tmp.path / "data.in"), "input");
+    EXPECT_EQ(read_file(tmp.path / "sample.dic"), "dic");
+    prepare_files_with_id("1.in", 1, infile, pid,
+                          work_dir.data(),
+                          outfile, userfile, 2, 3);
+    EXPECT_EQ(read_file(tmp.path / "data3.in"), "input");
 }
 
 TEST(SubmissionInfoBasics) {
@@ -555,13 +584,10 @@ TEST(SubmissionInfoHelpers) {
     char uid[128] = {};
     getSolutionInfoFromSubmissionInfo(info, pid, uid, lang);
     EXPECT_EQ(pid, 1);
-    auto old_cwd = std::filesystem::current_path();
-    std::filesystem::current_path(tmp.path);
     char code[CODESIZE] = {};
-    getSolutionFromSubmissionInfo(info, code);
+    getSolutionFromSubmissionInfo(info, code, tmp.path.string().c_str());
     EXPECT_TRUE(std::string(code).find("code") != std::string::npos);
     EXPECT_TRUE(std::filesystem::exists(tmp.path / "Main.txt"));
-    std::filesystem::current_path(old_cwd);
 }
 
 TEST(WebSocketSenderBasics) {
@@ -2293,7 +2319,7 @@ TEST(JudgeLibExtraFunctions) {
     auto runtime_info = getRuntimeInfoContents((tmp.path / "big.txt").string());
     EXPECT_TRUE(runtime_info.size() > 4096);
     EXPECT_TRUE(runtime_info.size() <= 5120);
-    print_runtimeerror("oops");
+    print_runtimeerror("oops", root.c_str());
     EXPECT_TRUE(std::filesystem::exists(tmp.path / "error.out"));
     std::filesystem::current_path(old_cwd);
 }
@@ -2307,6 +2333,22 @@ TEST(JudgeLibDynamicInstances) {
     EXPECT_TRUE(adapter != nullptr);
     std::unique_ptr<Compare::Compare> compare(getCompareModel());
     EXPECT_TRUE(compare != nullptr);
+}
+
+TEST(JudgeLibDynamicInstanceCache) {
+    test_hooks::reset();
+    languageNameReader.loadJSON("{\"1\":\"c11\"}");
+    auto &st = test_hooks::state();
+    int before_dlopen = st.dlopen_calls;
+    int before_dlsym = st.dlsym_calls;
+    std::unique_ptr<Language> lang1(getLanguageModel(1));
+    std::unique_ptr<Language> lang2(getLanguageModel(1));
+    EXPECT_TRUE(lang1 != nullptr);
+    EXPECT_TRUE(lang2 != nullptr);
+    int dlopen_delta = st.dlopen_calls - before_dlopen;
+    int dlsym_delta = st.dlsym_calls - before_dlsym;
+    EXPECT_TRUE(dlopen_delta == 0 || dlopen_delta == 1);
+    EXPECT_TRUE(dlsym_delta == 0 || dlsym_delta == 1);
 }
 
 TEST(JudgeLibGetSimBranches) {
@@ -2577,7 +2619,7 @@ TEST(JudgeClientRunSolutionPaths) {
     auto work = tmp.path.string();
     int stdout_fd = dup(fileno(stdout));
     int stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem); }, 0);
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, make_config_snapshot()); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -2593,7 +2635,7 @@ TEST(JudgeClientRunSolutionPaths) {
     use_ptrace = 1;
     stdout_fd = dup(fileno(stdout));
     stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution_parallel(lang, work.data(), tl, used, mem, 1); }, 0);
+    expect_exit([&]() { run_solution_parallel(lang, work.data(), tl, used, mem, 1, make_config_snapshot()); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -2625,7 +2667,7 @@ TEST(JudgeClientRunSolutionNonAllTest) {
     auto work = tmp.path.string();
     int stdout_fd = dup(fileno(stdout));
     int stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem); }, 0);
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, make_config_snapshot()); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -2656,7 +2698,7 @@ TEST(JudgeClientRunSolutionPtrace) {
     auto work = tmp.path.string();
     int stdout_fd = dup(fileno(stdout));
     int stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem); }, 0);
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, make_config_snapshot()); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -2697,7 +2739,7 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = 0;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, MEMORY_LIMIT_EXCEEDED);
 
     ac = ACCEPT;
@@ -2707,7 +2749,7 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_TRUE(ac == ACCEPT || ac == RUNTIME_ERROR);
 
     ac = ACCEPT;
@@ -2718,7 +2760,7 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
 
     ac = ACCEPT;
@@ -2727,7 +2769,7 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = (SIGXCPU << 8) | 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_TRUE(ac != ACCEPT);
 
     ac = ACCEPT;
@@ -2735,7 +2777,7 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = SIGXCPU;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_TRUE(ac != ACCEPT);
     std::filesystem::current_path(old_cwd);
 }
@@ -2768,7 +2810,7 @@ TEST(JudgeClientWatchSolutionKilledDebug) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     DEBUG = 0;
     ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
@@ -2797,37 +2839,37 @@ TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     int top = 0;
     int ac = ACCEPT;
     use_ptrace = 0;
-    test_hooks::state().wait4_status = 0x7f;
+    test_hooks::state().wait4_status = SIGKILL;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_TRUE(read_file(tmp.path / "error.out").find("Runtime Error:") != std::string::npos);
 
     write_file(tmp.path / "error.out", "");
     ac = ACCEPT;
     top = 0;
-    test_hooks::state().wait4_status = (SIGALRM << 8) | 0x7f;
+    test_hooks::state().wait4_status = SIGALRM;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, TIME_LIMIT_EXCEEDED);
 
     write_file(tmp.path / "error.out", "");
     ac = ACCEPT;
     top = 0;
-    test_hooks::state().wait4_status = (SIGXFSZ << 8) | 0x7f;
+    test_hooks::state().wait4_status = SIGXFSZ;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
 
     write_file(tmp.path / "error.out", "");
     ac = ACCEPT;
     top = 0;
-    test_hooks::state().wait4_status = (SIGILL << 8) | 0x7f;
+    test_hooks::state().wait4_status = SIGILL;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, RUNTIME_ERROR);
     std::filesystem::current_path(old_cwd);
 }
@@ -2858,7 +2900,7 @@ TEST(JudgeClientWatchSolutionExitcodeDebug) {
     test_hooks::state().wait4_status = (SIGXFSZ << 8) | 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
     DEBUG = 0;
     use_ptrace = 0;
@@ -2891,7 +2933,7 @@ TEST(JudgeClientWatchSolutionSignalDebug) {
     test_hooks::state().wait4_status = SIGXFSZ;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
     DEBUG = 0;
     std::filesystem::current_path(old_cwd);
@@ -2923,7 +2965,7 @@ TEST(JudgeClientWatchSolutionMemoryLimitDebug) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     DEBUG = 0;
     use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
@@ -2956,7 +2998,7 @@ TEST(JudgeClientWatchSolutionRuntimeErrorBranch) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, RUNTIME_ERROR);
     use_ptrace = 0;
     ALL_TEST_MODE = 1;
@@ -2988,7 +3030,7 @@ TEST(JudgeClientWatchSolutionOutputLimitPtrace) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
     use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
@@ -3024,7 +3066,7 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
     int ac = ACCEPT;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(call_counter[12], 1);
 
     std::fill(call_counter, call_counter + call_array_size, 0);
@@ -3034,7 +3076,7 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
     ac = ACCEPT;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()));
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot());
     EXPECT_EQ(ac, RUNTIME_ERROR);
     use_ptrace = 0;
     record_call = 0;
@@ -3060,7 +3102,7 @@ TEST(JudgeSolutionTimeAndMemory) {
     ALL_TEST_MODE = 0;
     use_max_time = 1;
     auto res = judge_solution(ac, used, tl, 0, 1, infile, outfile, userfile, code,
-                              pe, 0, work.data(), top, 64, 1, 1, global);
+                              pe, 0, work.data(), top, 64, 1, 1, global, make_config_snapshot());
     EXPECT_EQ(res.ACflg, MEMORY_LIMIT_EXCEEDED);
     ALL_TEST_MODE = 1;
 }
@@ -3085,7 +3127,7 @@ TEST(JudgeSolutionCompareResults) {
     double tl = 1.0;
     int top = 0;
     auto res = judge_solution(ac, used, tl, 0, 1, infile, outfile, userfile, code,
-                              pe, 0, work.data(), top, 64, 1, 1, global);
+                              pe, 0, work.data(), top, 64, 1, 1, global, make_config_snapshot());
     EXPECT_EQ(res.ACflg, WRONG_ANSWER);
 
     test_hooks::state().compare_result = PRESENTATION_ERROR;
@@ -3094,7 +3136,7 @@ TEST(JudgeSolutionCompareResults) {
     top = 0;
     pe = 0;
     res = judge_solution(ac, used, tl, 0, 1, infile, outfile, userfile, code,
-                         pe, 0, work.data(), top, 64, 1, 1, global);
+                         pe, 0, work.data(), top, 64, 1, 1, global, make_config_snapshot());
     EXPECT_EQ(res.ACflg, PRESENTATION_ERROR);
     EXPECT_EQ(pe, PRESENTATION_ERROR);
     DEBUG = 0;
@@ -3123,7 +3165,7 @@ TEST(JudgeSolutionSpecialJudge) {
     test_hooks::state().pipe_seed = "0";
     int stdout_fd = dup(fileno(stdout));
     auto res = judge_solution(ac, used, tl, 1, 1, infile, outfile, userfile, code,
-                              pe, 0, work.data(), top, 64, 1, 1, global);
+                              pe, 0, work.data(), top, 64, 1, 1, global, make_config_snapshot());
     EXPECT_EQ(res.ACflg, ACCEPT);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -3153,7 +3195,7 @@ TEST(JudgeClientRunJudgeTaskBranches) {
     int stderr_fd = dup(fileno(stderr));
     expect_exit([&]() {
         runJudgeTask(1, 0, work.data(), infilePair, ac, 0, 1, 1.0, 0.0, 64,
-                     1, usercode, 0, global);
+                     1, usercode, 0, global, make_config_snapshot());
     }, 0);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -3172,7 +3214,7 @@ TEST(JudgeClientRunJudgeTaskBranches) {
     stdout_fd = dup(fileno(stdout));
     stderr_fd = dup(fileno(stderr));
     JudgeResult res = runJudgeTask(1, 0, work.data(), infilePair, ac, 0, 1, 1.0,
-                                   0.0, 64, 1, usercode, 0, global);
+                                   0.0, 64, 1, usercode, 0, global, make_config_snapshot());
     if (stdout_fd >= 0) {
         fflush(stdout);
         dup2(stdout_fd, fileno(stdout));
@@ -3184,6 +3226,31 @@ TEST(JudgeClientRunJudgeTaskBranches) {
         close(stderr_fd);
     }
     EXPECT_EQ(res.ACflg, ACCEPT);
+}
+
+TEST(JudgeClientRunJudgeTaskTimeLimitClamp) {
+    test_hooks::reset();
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    std::strcpy(oj_home, root.c_str());
+    languageNameReader.loadJSON("{\"0\":\"fake\"}");
+    std::filesystem::create_directories(tmp.path / "data" / "1");
+    write_file(tmp.path / "data" / "1" / "1.in", "");
+    write_file(tmp.path / "data" / "1" / "1.out", "");
+    write_file(tmp.path / "error0.out", "");
+    std::string work = tmp.path.string();
+    std::string global = work + "/";
+    std::pair<std::string, int> infilePair("1.in", 1);
+    char usercode[16] = "code";
+    int ac = ACCEPT;
+    test_hooks::state().compare_result = ACCEPT;
+    test_hooks::state().wait4_status = (SIGALRM << 8) | 0x7f;
+    test_hooks::state().wait4_utime_ms = 10;
+    test_hooks::state().wait4_stime_ms = 0;
+    JudgeResult res = runJudgeTask(1, 0, work.data(), infilePair, ac, 0, 1, 1.0,
+                                   0.0, 64, 1, usercode, 0, global, make_config_snapshot());
+    EXPECT_EQ(res.ACflg, TIME_LIMIT_EXCEEDED);
+    EXPECT_EQ(static_cast<int>(res.usedTime), 1000);
 }
 
 TEST(JudgeClientRunParallelJudge) {
@@ -3204,7 +3271,7 @@ TEST(JudgeClientRunParallelJudge) {
     test_hooks::state().compare_result = ACCEPT;
     test_hooks::state().wait4_status = 0;
     auto res = runParallelJudge(1, 0, work.data(), const_cast<char *>("code"), 1, 0, 64,
-                                inFileList, ac, 0, global, submission);
+                                inFileList, ac, 0, global, submission, make_config_snapshot());
     EXPECT_TRUE(res.pass_point >= 0);
 }
 
@@ -3239,7 +3306,7 @@ TEST(JudgeClientWatchSolutionWithFileIdDebug) {
     watch_solution_with_file_id(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                                 const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                                 used, tl, p_id, pe, const_cast<char *>(root.c_str()), 1,
-                                call_counter_local);
+                                call_counter_local, make_config_snapshot());
     DEBUG = 0;
     ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
@@ -3275,7 +3342,7 @@ TEST(JudgeClientWatchSolutionWithFileIdPtraceBranch) {
     watch_solution_with_file_id(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                                 const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                                 used, tl, p_id, pe, const_cast<char *>(root.c_str()), 1,
-                                call_counter_local);
+                                call_counter_local, make_config_snapshot());
     EXPECT_EQ(call_counter_local[12], 1);
     use_ptrace = 0;
     record_call = 0;
@@ -3531,10 +3598,14 @@ int main() {
             std::cout << "[FAIL] " << t.name << ": " << e.what() << "\n";
         }
     }
-    if (__gcov_exit) {
-        __gcov_exit();
-    } else if (__gcov_flush) {
+#ifdef UNIT_TEST
+#undef exit
+#undef _exit
+#endif
+    if (__gcov_flush) {
         __gcov_flush();
+    } else if (__gcov_exit) {
+        __gcov_exit();
     }
     if (failed) {
         std::cout << failed << " test(s) failed\n";

@@ -45,6 +45,8 @@ struct State {
     bool mysql_start_ok = true;
     std::string last_exec_path;
     std::string last_dlopen_path;
+    int dlopen_calls = 0;
+    int dlsym_calls = 0;
     int ptrace_syscall = 0;
     std::string pipe_seed;
     bool pipe_fail = false;

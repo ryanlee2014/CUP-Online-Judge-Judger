@@ -22,7 +22,7 @@ Pack::Pack(string str) {
     setString(std::move(str));
 }
 
-int Pack::getInt() {
+int Pack::getInt() const {
     return num;
 }
 
@@ -32,7 +32,7 @@ Pack &Pack::setInt(int num) {
     return *this;
 }
 
-double Pack::getFloat() {
+double Pack::getFloat() const {
     return f;
 }
 
@@ -42,7 +42,7 @@ Pack &Pack::setFloat(double num) {
     return *this;
 }
 
-string &Pack::getString() {
+const string &Pack::getString() const {
     return str;
 }
 
@@ -53,7 +53,7 @@ Pack &Pack::setString(string str) {
     return *this;
 }
 
-int Pack::getType() {
+int Pack::getType() const {
     return type;
 }
 

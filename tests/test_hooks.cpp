@@ -154,7 +154,9 @@ int test_system(const char *command) TEST_HOOKS_THROW {
 
 void *test_dlopen(const char *filename, int flag) TEST_HOOKS_THROW {
     (void)flag;
-    test_hooks::state().last_dlopen_path = filename ? filename : "";
+    auto &st = test_hooks::state();
+    st.last_dlopen_path = filename ? filename : "";
+    ++st.dlopen_calls;
     return reinterpret_cast<void *>(0x1);
 }
 
@@ -297,6 +299,7 @@ void destroy_any(void *ptr) {
 
 void *test_dlsym(void *handle, const char *symbol) TEST_HOOKS_THROW {
     (void)handle;
+    ++test_hooks::state().dlsym_calls;
     std::string sym = symbol ? symbol : "";
     const auto &path = test_hooks::state().last_dlopen_path;
     if (sym.find("destroy") == 0) {

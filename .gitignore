@@ -67,6 +67,8 @@
 .idea
 /**/.idea/**
 .vscode/settings.json
+.trae/
+/docs/
 cmake-build-debug/cmake_install.cmake
 cmake-build-debug/CMakeCache.txt
 cmake-build-debug/judge_client

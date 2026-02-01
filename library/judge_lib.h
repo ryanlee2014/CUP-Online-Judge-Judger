@@ -95,6 +95,7 @@ extern vector<pair<string, int> >getFileList(const string& path, const function<
 extern vector<pair<string, int> >getFileList(const string& path);
 
 extern int get_sim(int solution_id, int lang, int pid, int &sim_s_id);
+extern int get_sim(int solution_id, int lang, int pid, int &sim_s_id, const char *work_dir);
 
 extern string getFileContent(const string& file);
 
@@ -111,12 +112,15 @@ extern void prepare_files_with_id(const char *filename, int namelen, char *infil
                            char *work_dir, char *outfile, char *userfile, int runner_id, int file_id);
 
 extern void print_runtimeerror(const char *err);
+extern void print_runtimeerror(const char *err, const char *work_dir);
 
 extern void getProblemInfoFromSubmissionInfo(SubmissionInfo& submissionInfo, double& time_lmt, int& mem_lmt, int& isspj);
 
 extern void getCustomInputFromSubmissionInfo(SubmissionInfo& submissionInfo);
+extern void getCustomInputFromSubmissionInfo(SubmissionInfo& submissionInfo, const char* work_dir);
 
 extern void getSolutionFromSubmissionInfo(SubmissionInfo& submissionInfo, char* usercode);
+extern void getSolutionFromSubmissionInfo(SubmissionInfo& submissionInfo, char* usercode, const char* work_dir);
 
 extern string getRuntimeInfoContents(const string& filename);
 

@@ -51,7 +51,7 @@ public:
 
     Bundle& setTotalPoint(int);
 
-    Bundle& setRuntimeInfo(string &);
+    Bundle& setRuntimeInfo(const string &);
 
     Bundle& clear();
 

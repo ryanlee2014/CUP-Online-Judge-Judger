@@ -8,6 +8,7 @@
 #include "../../rapidjson/pointer.h"
 #include <iostream>
 #include <fstream>
+#include <iterator>
 #define ASSERT_VALID(x) assert(x)
 using std::fstream;
 using rapidjson::Document;
@@ -19,11 +20,11 @@ JSONVectorReader::JSONVectorReader(const string &filePath) {
 }
 
 bool JSONVectorReader::loadFile(const string &filePath) {
-    fstream JSON_FILE(filePath.c_str());
-    string s, line;
-    while (getline(JSON_FILE, line)) {
-        s += line;
+    fstream JSON_FILE(filePath.c_str(), ios::in | ios::binary);
+    if (!JSON_FILE.is_open()) {
+        return loadJSON(string());
     }
+    string s((istreambuf_iterator<char>(JSON_FILE)), istreambuf_iterator<char>());
     JSON_FILE.close();
     return loadJSON(s);
 }

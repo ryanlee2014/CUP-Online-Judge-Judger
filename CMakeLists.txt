@@ -33,7 +33,7 @@ endif ()
 # handle the QUIETLY and REQUIRED arguments and set MYSQL_FOUND to TRUE if
 # all listed variables are TRUE
 find_package(Threads)
-add_executable(judge_client header/okcalls.h header/ncalls.h header/okcalls32.h header/okcalls64.h library/json.hpp library/easywsclient.cpp library/easywsclient.hpp judge_client.cpp model/websocket/WebSocketSender.cpp model/websocket/WebSocketSender.h library/judge_lib.h header/static_var.h model/base/JSONVectorReader.h model/base/JSONVectorReader.cpp model/base/Bundle.cpp model/base/Bundle.h library/judge_lib.h.cpp header/static_var.cpp model/base/Pack.cpp model/base/Pack.h model/wrapper/CompilerConfigReader.cpp model/wrapper/CompilerConfigReader.h model/base/ThreadPool.h model/submission/SubmissionInfo.cpp model/submission/SubmissionInfo.h model/judge/language/Language.cpp model/judge/language/Language.h model/judge/policy/SpecialJudge.cpp model/judge/policy/SpecialJudge.h model/config/ConfigInfo.cpp model/config/ConfigInfo.h manager/syscall/InitManager.cpp manager/syscall/InitManager.h external/mysql/MySQLSubmissionAdapter.cpp external/mysql/MySQLSubmissionAdapter.h)
+add_executable(judge_client header/okcalls.h header/ncalls.h header/okcalls32.h header/okcalls64.h library/json.hpp library/easywsclient.cpp library/easywsclient.hpp judge_client.cpp judge_client_adapter.cpp judge_client_compile.cpp judge_client_context.cpp judge_client_flow_helpers.cpp judge_client_report_helpers.cpp judge_client_run_helpers.cpp judge_client_run.cpp judge_client_report.cpp judge_client_util.cpp judge_client_flow.cpp judge_client_watch.cpp model/websocket/WebSocketSender.cpp model/websocket/WebSocketSender.h library/judge_lib.h header/static_var.h model/base/JSONVectorReader.h model/base/JSONVectorReader.cpp model/base/Bundle.cpp model/base/Bundle.h library/judge_lib.h.cpp header/static_var.cpp model/base/Pack.cpp model/base/Pack.h model/wrapper/CompilerConfigReader.cpp model/wrapper/CompilerConfigReader.h model/base/ThreadPool.h model/submission/SubmissionInfo.cpp model/submission/SubmissionInfo.h model/judge/language/Language.cpp model/judge/language/Language.h model/judge/policy/SpecialJudge.cpp model/judge/policy/SpecialJudge.h model/config/ConfigInfo.cpp model/config/ConfigInfo.h manager/syscall/InitManager.cpp manager/syscall/InitManager.h external/mysql/MySQLSubmissionAdapter.cpp external/mysql/MySQLSubmissionAdapter.h)
 add_executable(wsjudged wsjudged.cpp)
 target_link_libraries(judge_client ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(judge_client ${CMAKE_DL_LIBS})
@@ -47,6 +47,17 @@ if (ENABLE_TESTS)
         tests/stub_easywsclient.cpp
         tests/judge_client_test.cpp
         tests/wsjudged_test.cpp
+        judge_client_adapter.cpp
+        judge_client_compile.cpp
+        judge_client_run_helpers.cpp
+        judge_client_run.cpp
+        judge_client_report.cpp
+        judge_client_util.cpp
+        judge_client_flow.cpp
+        judge_client_context.cpp
+        judge_client_flow_helpers.cpp
+        judge_client_report_helpers.cpp
+        judge_client_watch.cpp
         header/static_var.cpp
         library/judge_lib.h.cpp
         model/base/JSONVectorReader.cpp

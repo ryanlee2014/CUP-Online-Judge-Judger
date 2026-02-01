@@ -3,6 +3,9 @@
 //
 
 #include "seccomp_helper.h"
+#ifdef UNIT_TEST
+#include "../../../../tests/test_hooks.h"
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include "syscall-name.h"
