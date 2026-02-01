@@ -29,5 +29,3 @@ struct FlowState {
 std::string build_run_dir(int runner_id);
 void prepare_work_dir(const JudgeConfigSnapshot &config, char *work_dir);
 void prepare_environment(JudgeContext &ctx, int runner_id, FlowState &state);
-void prepare_syscall_template(const JudgeContext &ctx, std::vector<int> &syscall_template,
-                              const int *&syscall_template_ptr);

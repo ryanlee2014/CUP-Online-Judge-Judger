@@ -1,44 +1,12 @@
 #include "judge_client_report_helpers.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 
 #include "library/judge_lib.h"
 
 using namespace std;
-
-std::string build_test_run_output(int ACflg, double &usedtime, double timeLimit, int solution_id,
-                                  const char *work_dir, bool debug_enabled) {
-    string error_message;
-    if (ACflg == TIME_LIMIT_EXCEEDED) {
-        usedtime = timeLimit * 1000;
-        error_message = "Time Limit Exceeded.Kill Process.\n";
-    } else if (ACflg == RUNTIME_ERROR) {
-        if (debug_enabled)
-            printf("add RE info of %d..... \n", solution_id);
-        error_message = "Runtime Error. Kill Process.\n";
-    } else if (ACflg == MEMORY_LIMIT_EXCEEDED) {
-        error_message = "Memory Limit Exceeded.Kill Process.\n";
-    }
-    string test_run_out;
-    if (ACflg == ACCEPT) {
-        test_run_out = getRuntimeInfoContents((std::filesystem::path(work_dir) / "user.out").string().c_str());
-    } else {
-        test_run_out = error_message;
-    }
-    if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
-        auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
-        test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
-        test_run_out += "\n......Omit " + omit + " characters.";
-    }
-    if (debug_enabled) {
-        cout << "test_run_out:" << endl << test_run_out << endl;
-    }
-    if (usedtime == timeLimit * 1000) {
-        test_run_out += "\n娴嬭瘯杩愯涓彂鐢熻繍琛岃秴鏃讹紝绋嬪簭琚己鍒跺仠姝?;";
-    }
-    return test_run_out;
-}
 
 void send_test_run_bundle(int solution_id, double usedtime, int topmemory, const string &test_run_out,
                           const ResultSender &sender) {
@@ -53,3 +21,41 @@ void send_test_run_bundle(int solution_id, double usedtime, int topmemory, const
     bundle.setTestRunResult(test_run_out);
     sender(bundle.toJSONString());
 }
+
+std::string join_report_path(const char *base, const char *name) {
+    return (std::filesystem::path(base) / name).string();
+}
+
+void update_bundle_progress(double usedtime, int topmemory, double timeLimit, int memoryLimit,
+                            int pass_point, double pass_rate) {
+    bundle.setUsedTime(std::min(usedtime, timeLimit * 1000));
+    bundle.setMemoryUse(std::min(topmemory / ONE_KILOBYTE, memoryLimit * STD_MB / ONE_KILOBYTE));
+    bundle.setPassPoint(pass_point);
+    bundle.setPassRate(pass_rate);
+}
+
+void adjust_usedtime_for_result(int result, double timeLimit, bool use_max_time,
+                                double &usedtime, double max_case_time) {
+    if (use_max_time) {
+        usedtime = max_case_time;
+    }
+    if (result == TIME_LIMIT_EXCEEDED) {
+        usedtime = timeLimit * 1000;
+    }
+}
+
+std::string build_runtime_info(int result, int solution_id, const char *work_dir, bool debug_enabled) {
+    std::string runtimeInfo;
+    if (result == RUNTIME_ERROR) {
+        runtimeInfo = getRuntimeInfoContents(join_report_path(work_dir, "error.out").c_str());
+        if (debug_enabled)
+            printf("add RE info of %d..... \n", solution_id);
+    }
+    if (result == WRONG_ANSWER || result == PRESENTATION_ERROR) {
+        runtimeInfo = getRuntimeInfoContents(join_report_path(work_dir, "diff.out").c_str());
+        if (debug_enabled)
+            printf("add diff info of %d..... \n", solution_id);
+    }
+    return runtimeInfo;
+}
+

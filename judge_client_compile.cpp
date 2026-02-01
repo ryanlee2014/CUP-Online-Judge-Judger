@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -11,40 +10,12 @@
 #include <unistd.h>
 
 #include "header/static_var.h"
+#include "judge_client_compile_helpers.h"
 #include "library/judge_lib.h"
 #include "model/base/JSONVectorReader.h"
 #include "model/judge/language/Language.h"
 
 using namespace std;
-using CompilerArgsReader = JSONVectorReader;
-using ConfigReader = JSONVectorReader;
-
-static CompilerArgsReader &get_compiler_args_reader(const std::string &path) {
-    static CompilerArgsReader cached_reader;
-    static std::string cached_path;
-    static std::filesystem::file_time_type cached_mtime{};
-    static bool has_mtime = false;
-    std::error_code ec;
-    auto mtime = std::filesystem::last_write_time(path, ec);
-    bool should_reload = (path != cached_path);
-    if (!ec) {
-        should_reload = should_reload || !has_mtime || mtime != cached_mtime;
-    } else {
-        should_reload = should_reload || !has_mtime;
-    }
-    if (should_reload) {
-        cached_reader.loadFile(path);
-        cached_path = path;
-        if (!ec) {
-            cached_mtime = mtime;
-            has_mtime = true;
-        } else {
-            has_mtime = false;
-        }
-    }
-    return cached_reader;
-}
-
 void init_mysql_conf() {
     strcpy(java_xms, "-Xms32m");
     strcpy(java_xmx, "-Xmx256m");
@@ -55,24 +26,24 @@ void init_mysql_conf() {
     database_port = 3306;
     string configDIR = oj_home;
     configDIR += "/etc/config.json";
-    ConfigReader configReader(configDIR);
-    strcpy(host_name, configReader.GetString("hostname").c_str());
-    strcpy(user_name, configReader.GetString("username").c_str());
-    strcpy(password, configReader.GetString("password").c_str());
-    strcpy(db_name, configReader.GetString("db_name").c_str());
-    database_port = configReader.GetInt("port");
-    javaTimeBonus = configReader.GetInt("java_time_bonus");
-    java_memory_bonus = configReader.GetInt("java_memory_bonus");
-    strcpy(java_xms, configReader.GetString("java_xms").c_str());
-    strcpy(java_xmx, configReader.GetString("java_xmx").c_str());
-    sim_enable = configReader.GetInt("sim_enable");
-    full_diff = configReader.GetInt("full_diff");
-    strcpy(http_username, configReader.GetString("judger_name").c_str());
-    SHARE_MEMORY_RUN = configReader.GetInt("shm_run");
-    use_max_time = configReader.GetInt("use_max_time");
-    use_ptrace = configReader.GetInt("use_ptrace");
-    ALL_TEST_MODE = configReader.GetInt("all_test_mode");
-    enable_parallel = configReader.GetInt("enable_parallel");
+    MysqlConfigValues cfg = read_mysql_config(configDIR);
+    strcpy(host_name, cfg.hostname.c_str());
+    strcpy(user_name, cfg.username.c_str());
+    strcpy(password, cfg.password.c_str());
+    strcpy(db_name, cfg.db_name.c_str());
+    database_port = cfg.port;
+    javaTimeBonus = cfg.java_time_bonus;
+    java_memory_bonus = cfg.java_memory_bonus;
+    strcpy(java_xms, cfg.java_xms.c_str());
+    strcpy(java_xmx, cfg.java_xmx.c_str());
+    sim_enable = cfg.sim_enable;
+    full_diff = cfg.full_diff;
+    strcpy(http_username, cfg.judger_name.c_str());
+    SHARE_MEMORY_RUN = cfg.shm_run;
+    use_max_time = cfg.use_max_time;
+    use_ptrace = cfg.use_ptrace;
+    ALL_TEST_MODE = cfg.all_test_mode;
+    enable_parallel = cfg.enable_parallel;
 }
 
 int compile(int lang, char *work_dir) {
