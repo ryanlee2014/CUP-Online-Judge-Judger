@@ -1,7 +1,8 @@
 #include "judge_client_report_result_helpers.h"
 
-#include "judge_client_report_finalize_helpers.h"
 #include "judge_client_report_helpers.h"
+#include "judge_client_report_finalize_helpers.h"
+#include "judge_client_report_payload_helpers.h"
 #include "judge_client_report_score_helpers.h"
 #include "library/judge_lib.h"
 
@@ -15,19 +16,19 @@ ResultBundlePayload build_result_payload(int &ACflg, int &finalACflg, int &PEflg
                                          const char *work_dir, bool debug_enabled) {
     ResultBundlePayload payload;
     payload.result = resolve_final_result(ACflg, finalACflg, PEflg, config);
-    if (config.sim_enable && payload.result == ACCEPT && (languageModel->enableSim())) {
-        sim = get_sim(solution_id, lang, p_id, sim_s_id, work_dir);
+    if (payload.result == ACCEPT) {
+        sim = compute_sim_result(solution_id, lang, p_id, config, languageModel, work_dir, sim_s_id);
     } else {
         sim = ZERO_SIM;
+        sim_s_id = 0;
     }
     payload.sim = sim;
     payload.sim_s_id = sim_s_id;
     payload.topmemory = topmemory;
     payload.pass_point = pass_point;
     payload.pass_rate = calculate_pass_rate(pass_rate, num_of_test);
-    apply_runtime_info_and_time(payload.result, solution_id, config, work_dir, debug_enabled,
-                                timeLimit, max_case_time, usedtime, payload.runtimeInfo);
-    payload.usedtime = usedtime;
+    payload.runtimeInfo = compute_runtime_info(payload.result, solution_id, config, work_dir, debug_enabled);
+    payload.usedtime = compute_final_used_time(payload.result, timeLimit, config, max_case_time, usedtime);
     return payload;
 }
 

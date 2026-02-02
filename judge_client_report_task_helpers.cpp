@@ -26,6 +26,42 @@ static pid_t fork_and_run_child(F fn) {
     return pid;
 }
 
+static void prepare_test_run_input(int solution_id, int lang, char *work_dir,
+                                   shared_ptr<ISubmissionAdapter> &adapter, SubmissionInfo &submissionInfo,
+                                   const ResultSender &sender) {
+    printf("running a custom input...\n");
+    if (MYSQL_MODE) {
+        adapter->getCustomInput(solution_id, work_dir);
+    } else {
+        getCustomInputFromSubmissionInfo(submissionInfo, work_dir);
+    }
+    InitManager::initSyscallLimits(lang, call_counter, record_call, call_array_size);
+    send_running_bundle(solution_id, 0, false, sender);
+}
+
+static void execute_test_run(int solution_id, int lang, int p_id, int SPECIAL_JUDGE, double timeLimit,
+                             int memoryLimit, char *work_dir, char *infile, char *outfile, char *userfile,
+                             int &topmemory, int &ACflg, int &PEflg, double &usedtime,
+                             const string &judgerId, shared_ptr<Language> &languageModel,
+                             const JudgeConfigSnapshot &config, const ResultSender &sender,
+                             bool record_syscall, bool debug_enabled) {
+    pid_t pidApp = fork_and_run_child([&]() {
+        run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit, config);
+    });
+    if (pidApp != CHILD_PROCESS) {
+        watch_solution_ex(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
+                          solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
+                          p_id, PEflg, work_dir, config, record_syscall, debug_enabled);
+    }
+    ACflg = languageModel->fixACStatus(ACflg);
+    string test_run_out = build_test_run_output(ACflg, usedtime, timeLimit, solution_id, work_dir, debug_enabled);
+    send_test_run_bundle(solution_id, usedtime, topmemory, test_run_out, sender);
+    clean_workdir(work_dir);
+    string judger = judgerId;
+    removeSubmissionInfo(judger);
+    exit(0);
+}
+
 void report_compile_error_and_exit(int solution_id, const string &judgerId, char *work_dir,
                                    const ResultSender &sender) {
     string compile_info = getFileContent(join_report_path(work_dir, "ce.txt").c_str());
@@ -49,27 +85,8 @@ void handle_test_run(int solution_id, int lang, int p_id, int SPECIAL_JUDGE, dou
                      shared_ptr<ISubmissionAdapter> &adapter, SubmissionInfo &submissionInfo,
                      shared_ptr<Language> &languageModel, const JudgeConfigSnapshot &config,
                      const ResultSender &sender, bool record_syscall, bool debug_enabled) {
-    printf("running a custom input...\n");
-    if (MYSQL_MODE) {
-        adapter->getCustomInput(solution_id, work_dir);
-    } else {
-        getCustomInputFromSubmissionInfo(submissionInfo, work_dir);
-    }
-    InitManager::initSyscallLimits(lang, call_counter, record_call, call_array_size);
-    send_running_bundle(solution_id, 0, false, sender);
-    pid_t pidApp = fork_and_run_child([&]() {
-        run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit, config);
-    });
-    if (pidApp != CHILD_PROCESS) {
-        watch_solution_ex(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
-                          solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
-                          p_id, PEflg, work_dir, config, record_syscall, debug_enabled);
-    }
-    ACflg = languageModel->fixACStatus(ACflg);
-    string test_run_out = build_test_run_output(ACflg, usedtime, timeLimit, solution_id, work_dir, debug_enabled);
-    send_test_run_bundle(solution_id, usedtime, topmemory, test_run_out, sender);
-    clean_workdir(work_dir);
-    string judger = judgerId;
-    removeSubmissionInfo(judger);
-    exit(0);
+    prepare_test_run_input(solution_id, lang, work_dir, adapter, submissionInfo, sender);
+    execute_test_run(solution_id, lang, p_id, SPECIAL_JUDGE, timeLimit, memoryLimit, work_dir,
+                     infile, outfile, userfile, topmemory, ACflg, PEflg, usedtime, judgerId,
+                     languageModel, config, sender, record_syscall, debug_enabled);
 }

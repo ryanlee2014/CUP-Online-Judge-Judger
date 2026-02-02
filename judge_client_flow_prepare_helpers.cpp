@@ -2,16 +2,16 @@
 
 #include <cstdio>
 
+#include "judge_client_flow_load_helpers.h"
+#include "judge_client_flow_log_helpers.h"
 #include "judge_client_flow_prep_helpers.h"
 #include "judge_client_report.h"
 
 void prepare_paths(JudgeContext &ctx, int runner_id, FlowState &state) {
-    state.global_work_dir = build_run_dir(runner_id);
-    snprintf(state.work_dir, sizeof(state.work_dir), "%s", state.global_work_dir.c_str());
+    set_work_paths(runner_id, state);
     prepare_work_dir(ctx.config, state.work_dir);
-    load_language_name_cached(std::string(oj_home) + "/etc/language.json");
-    load_submission(ctx, state.work_dir);
-    snprintf(state.fullpath, sizeof(state.fullpath), "%s/data/%d", oj_home, ctx.p_id);
+    load_language_cache();
+    load_submission_data(ctx, state);
 }
 
 void prepare_limits_and_policy(JudgeContext &ctx, FlowState &state) {
@@ -23,7 +23,10 @@ void prepare_limits_and_policy(JudgeContext &ctx, FlowState &state) {
     }
     ctx.time_limit = clamp_time_limit(ctx.time_limit);
     ctx.memory_limit = clamp_memory_limit(ctx.memory_limit);
-    if (ctx.flags.debug) {
-        printf("time: %f mem: %d\n", ctx.time_limit, ctx.memory_limit);
-    }
+    log_limits(ctx.flags.debug, ctx.time_limit, ctx.memory_limit);
+}
+
+void set_work_paths(int runner_id, FlowState &state) {
+    state.global_work_dir = build_run_dir(runner_id);
+    snprintf(state.work_dir, sizeof(state.work_dir), "%s", state.global_work_dir.c_str());
 }
