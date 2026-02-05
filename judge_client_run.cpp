@@ -59,29 +59,62 @@ void run_solution(int &lang, char *work_dir, const double &time_lmt, const doubl
                         config, language_factory);
 }
 
+JudgeResult runJudgeTask(const RunTaskOptions &opts) {
+    int call_counter_local[call_array_size], PEflg;
+    char infile[BUFFER_SIZE], outfile[BUFFER_SIZE], userfile[BUFFER_SIZE];
+    int topmemory = 0;
+    prepare_run_files_with_id(opts.language, opts.runner_id, *opts.infile_pair, opts.problem_id, opts.work_dir,
+                              opts.case_index, call_counter_local, infile, outfile, userfile, opts.syscall_template,
+                              opts.record_syscall);
+    double usedtime = opts.used_time;
+    double timeLimit = opts.time_limit;
+    int memoryLimit = opts.memory_limit;
+    int language = opts.language;
+    auto pid = spawn_child([&]() {
+        run_solution_parallel(language, opts.work_dir, timeLimit, usedtime, memoryLimit, opts.case_index, *opts.config,
+                              opts.language_factory);
+    });
+    if (pid == CHILD_PROCESS) {
+        return {};
+    } else {
+        int ACflg = opts.ACflg;
+        return finish_run_with_id(pid, ACflg, opts.special_judge, opts.solution_id, opts.language, topmemory,
+                                  opts.memory_limit, usedtime, opts.time_limit, opts.problem_id, PEflg, opts.work_dir,
+                                  opts.case_index, call_counter_local, infile, outfile, userfile, opts.usercode,
+                                  *opts.global_work_dir, *opts.config, *opts.env, opts.record_syscall,
+                                  opts.debug_enabled, opts.language_factory, opts.compare_factory);
+    }
+}
+
 JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair<string, int> &infilePair, int ACflg,
                          int SPECIAL_JUDGE, int solution_id, double timeLimit, double usedtime, int memoryLimit,
                          int problemId, char *usercode, int num_of_test, string &global_work_dir,
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled, const int *syscall_template,
                          const LanguageFactory &language_factory, const CompareFactory &compare_factory) {
-    int call_counter_local[call_array_size], PEflg;
-    char infile[BUFFER_SIZE], outfile[BUFFER_SIZE], userfile[BUFFER_SIZE];
-    int topmemory = 0;
-    prepare_run_files_with_id(language, runner_id, infilePair, problemId, work_dir, num_of_test, call_counter_local,
-                              infile, outfile, userfile, syscall_template, record_syscall);
-    auto pid = spawn_child([&]() {
-        run_solution_parallel(language, work_dir, timeLimit, usedtime, memoryLimit, num_of_test, config,
-                              language_factory);
-    });
-    if (pid == CHILD_PROCESS) {
-        return {};
-    } else {
-        return finish_run_with_id(pid, ACflg, SPECIAL_JUDGE, solution_id, language, topmemory, memoryLimit, usedtime,
-                                  timeLimit, problemId, PEflg, work_dir, num_of_test, call_counter_local, infile,
-                                  outfile, userfile, usercode, global_work_dir, config, env,
-                                  record_syscall, debug_enabled, language_factory, compare_factory);
-    }
+    RunTaskOptions opts;
+    opts.runner_id = runner_id;
+    opts.language = language;
+    opts.work_dir = work_dir;
+    opts.infile_pair = &infilePair;
+    opts.ACflg = ACflg;
+    opts.special_judge = SPECIAL_JUDGE;
+    opts.solution_id = solution_id;
+    opts.time_limit = timeLimit;
+    opts.used_time = usedtime;
+    opts.memory_limit = memoryLimit;
+    opts.problem_id = problemId;
+    opts.usercode = usercode;
+    opts.case_index = num_of_test;
+    opts.global_work_dir = &global_work_dir;
+    opts.config = &config;
+    opts.env = &env;
+    opts.record_syscall = record_syscall;
+    opts.debug_enabled = debug_enabled;
+    opts.syscall_template = syscall_template;
+    opts.language_factory = language_factory;
+    opts.compare_factory = compare_factory;
+    return runJudgeTask(opts);
 }
 
 JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair<string, int> &infilePair, int ACflg,
@@ -118,18 +151,12 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
                         record_syscall, debug_enabled, nullptr, nullptr, nullptr);
 }
 
-JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
-                                   int usedtime, int memoryLimit,
-                                   vector<pair<string, int>> &inFileList,
-                                   int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
-                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
-                                   const JudgeEnv &env, bool record_syscall, bool debug_enabled,
-                                   const int *syscall_template, const LanguageFactory &language_factory,
-                                   const CompareFactory &compare_factory) {
+JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
     struct ChunkResult {
         vector<JudgeResult> results;
     };
     int workers = max(int(std::thread::hardware_concurrency()), 1);
+    auto &inFileList = *opts.in_file_list;
     size_t total = inFileList.size();
     if (total == 0) {
         return {3, 0, 0, 0, 0};
@@ -138,7 +165,7 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
 #ifdef UNIT_TEST
     for (size_t i = 0; i < total; ++i) {
         JudgeResult r{};
-        r.ACflg = ACflg;
+        r.ACflg = *opts.ac_flag;
         r.usedTime = 0;
         r.topMemory = 0;
         r.num = static_cast<int>(i);
@@ -161,7 +188,7 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
         chunk_size = static_cast<size_t>(env_chunk);
     }
     chunk_size = max<size_t>(1, min(chunk_size, total));
-    const int base_ac = ACflg;
+    const int base_ac = *opts.ac_flag;
     result.reserve((total + chunk_size - 1) / chunk_size);
     for (size_t start = 0; start < total; start += chunk_size) {
         size_t end = min(start + chunk_size, total);
@@ -172,13 +199,13 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                 double usedtime_local = 0;
                 const auto &infilePair = inFileList[i];
                 int local_ac = base_ac;
-                JudgeResult r = runJudgeTask(runner_id, submissionInfo.getLanguage(), work_dir, infilePair,
-                                             local_ac, SPECIAL_JUDGE, submissionInfo.getSolutionId(),
-                                             submissionInfo.getTimeLimit(), usedtime_local,
-                                             submissionInfo.getMemoryLimit(), submissionInfo.getProblemId(),
-                                             usercode, int(i), global_work_dir, config, env,
-                                             record_syscall, debug_enabled,
-                                             syscall_template, language_factory, compare_factory);
+                JudgeResult r = runJudgeTask(opts.runner_id, opts.submission->getLanguage(), opts.work_dir, infilePair,
+                                             local_ac, opts.special_judge, opts.submission->getSolutionId(),
+                                             opts.submission->getTimeLimit(), usedtime_local,
+                                             opts.submission->getMemoryLimit(), opts.submission->getProblemId(),
+                                             opts.usercode, int(i), *opts.global_work_dir, *opts.config, *opts.env,
+                                             opts.record_syscall, opts.debug_enabled,
+                                             opts.syscall_template, opts.language_factory, opts.compare_factory);
                 chunk.results.push_back(r);
             }
             return chunk;
@@ -191,6 +218,37 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
         }
     }
     return finalResult;
+}
+
+JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
+                                   int usedtime, int memoryLimit,
+                                   vector<pair<string, int>> &inFileList,
+                                   int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
+                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
+                                   const JudgeEnv &env, bool record_syscall, bool debug_enabled,
+                                   const int *syscall_template, const LanguageFactory &language_factory,
+                                   const CompareFactory &compare_factory) {
+    ParallelRunOptions opts;
+    opts.runner_id = runner_id;
+    opts.language = language;
+    opts.work_dir = work_dir;
+    opts.usercode = usercode;
+    opts.time_limit = timeLimit;
+    opts.used_time = usedtime;
+    opts.memory_limit = memoryLimit;
+    opts.in_file_list = &inFileList;
+    opts.ac_flag = &ACflg;
+    opts.special_judge = SPECIAL_JUDGE;
+    opts.global_work_dir = &global_work_dir;
+    opts.submission = &submissionInfo;
+    opts.config = &config;
+    opts.env = &env;
+    opts.record_syscall = record_syscall;
+    opts.debug_enabled = debug_enabled;
+    opts.syscall_template = syscall_template;
+    opts.language_factory = language_factory;
+    opts.compare_factory = compare_factory;
+    return runParallelJudge(opts);
 }
 
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
