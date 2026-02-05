@@ -88,7 +88,6 @@ void find_next_nonspace(int &c1, int &c2, FILE *&f1, FILE *&f2, int &ret, int DE
 int compile(int lang, char *work_dir, const JudgeEnv &env,
             const JudgeConfigSnapshot &config, bool debug);
 FILE *read_cmd_output(const char *fmt, ...);
-void init_mysql_conf();
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                            int &mem_lmt, int fileId, const JudgeConfigSnapshot &config);
 void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,

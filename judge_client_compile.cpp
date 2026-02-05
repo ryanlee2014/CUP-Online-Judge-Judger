@@ -18,31 +18,6 @@
 #include "model/judge/language/Language.h"
 
 using namespace std;
-void init_mysql_conf() {
-    JudgeContext ctx;
-    ctx.env.oj_home = oj_home;
-    ctx.env.http_baseurl = http_baseurl;
-    ctx.env.http_password = http_password;
-    init_mysql_conf(ctx);
-
-    std::snprintf(host_name, sizeof(host_name), "%s", ctx.env.host_name.c_str());
-    std::snprintf(user_name, sizeof(user_name), "%s", ctx.env.user_name.c_str());
-    std::snprintf(password, sizeof(password), "%s", ctx.env.password.c_str());
-    std::snprintf(db_name, sizeof(db_name), "%s", ctx.env.db_name.c_str());
-    database_port = ctx.env.database_port;
-    javaTimeBonus = ctx.config.java_time_bonus;
-    java_memory_bonus = ctx.config.java_memory_bonus;
-    std::snprintf(java_xms, sizeof(java_xms), "%s", ctx.config.java_xms.c_str());
-    std::snprintf(java_xmx, sizeof(java_xmx), "%s", ctx.config.java_xmx.c_str());
-    sim_enable = ctx.config.sim_enable;
-    full_diff = ctx.config.full_diff;
-    std::snprintf(http_username, sizeof(http_username), "%s", ctx.env.http_username.c_str());
-    SHARE_MEMORY_RUN = ctx.config.share_memory_run;
-    use_max_time = ctx.config.use_max_time;
-    use_ptrace = ctx.config.use_ptrace;
-    ALL_TEST_MODE = ctx.config.all_test_mode;
-    enable_parallel = ctx.config.enable_parallel;
-}
 
 void init_mysql_conf(JudgeContext &ctx) {
     string config_dir = ctx.env.oj_home + "/etc/config.json";
