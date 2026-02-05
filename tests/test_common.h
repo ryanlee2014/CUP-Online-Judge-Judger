@@ -126,6 +126,13 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir,
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled, const int *syscall_template,
                          const LanguageFactory &language_factory);
+JudgeResult runJudgeTask(int runner_id, int language, char *work_dir,
+                         const std::pair<std::string, int> &infilePair, int ACflg, int SPECIAL_JUDGE,
+                         int solution_id, double timeLimit, double usedtime, int memoryLimit,
+                         int problemId, char *usercode, int num_of_test, std::string &global_work_dir,
+                         const JudgeConfigSnapshot &config, const JudgeEnv &env,
+                         bool record_syscall, bool debug_enabled, const int *syscall_template,
+                         const LanguageFactory &language_factory, const CompareFactory &compare_factory);
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode,
                                    int timeLimit, int usedtime, int memoryLimit,
                                    std::vector<std::pair<std::string, int>> &inFileList,
@@ -139,6 +146,14 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled,
                                    const int *syscall_template, const LanguageFactory &language_factory);
+JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode,
+                                   int timeLimit, int usedtime, int memoryLimit,
+                                   std::vector<std::pair<std::string, int>> &inFileList,
+                                   int &ACflg, int SPECIAL_JUDGE, std::string &global_work_dir,
+                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
+                                   const JudgeEnv &env, bool record_syscall, bool debug_enabled,
+                                   const int *syscall_template, const LanguageFactory &language_factory,
+                                   const CompareFactory &compare_factory);
 void init_parameters(int argc, char **argv, int &solution_id,
                      int &runner_id, std::string &judgerId);
 void print_call_array();

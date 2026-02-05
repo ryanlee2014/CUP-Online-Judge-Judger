@@ -113,6 +113,20 @@ JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int sol
                                char *infile, char *outfile, char *userfile, char *usercode,
                                string &global_work_dir, const JudgeConfigSnapshot &config,
                                const JudgeEnv &env, bool record_syscall, bool debug_enabled) {
+    return finish_run_with_id(pid, ACflg, SPECIAL_JUDGE, solution_id, language, topmemory, memoryLimit, usedtime,
+                              timeLimit, problemId, PEflg, work_dir, num_of_test, call_counter_local, infile, outfile,
+                              userfile, usercode, global_work_dir, config, env, record_syscall, debug_enabled,
+                              nullptr, nullptr);
+}
+
+JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int solution_id, int language,
+                               int &topmemory, int memoryLimit, double &usedtime, double timeLimit, int problemId,
+                               int &PEflg, char *work_dir, int num_of_test,
+                               int call_counter_local[call_array_size],
+                               char *infile, char *outfile, char *userfile, char *usercode,
+                               string &global_work_dir, const JudgeConfigSnapshot &config,
+                               const JudgeEnv &env, bool record_syscall, bool debug_enabled,
+                               const LanguageFactory &language_factory, const CompareFactory &compare_factory) {
     watch_solution_with_file_id_ex(pid, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
                                    solution_id, language, topmemory, memoryLimit, usedtime, timeLimit,
                                    problemId, PEflg, work_dir, num_of_test, call_counter_local, config,
@@ -121,9 +135,18 @@ JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int sol
         usedtime = timeLimit * 1000;
         ACflg = TIME_LIMIT_EXCEEDED;
     }
-    judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, problemId, infile,
-                   outfile, userfile, usercode, PEflg, language, work_dir, topmemory,
-                   memoryLimit, solution_id, num_of_test, global_work_dir, config, env, debug_enabled);
+    JudgeContext ctx;
+    ctx.lang = language;
+    ctx.p_id = problemId;
+    ctx.config = config;
+    ctx.env = env;
+    ctx.flags.debug = debug_enabled ? 1 : 0;
+    ctx.flags.record_call = record_syscall ? 1 : 0;
+    ctx.language_factory = language_factory;
+    ctx.compare_factory = compare_factory;
+    judge_solution(ctx, ACflg, usedtime, timeLimit, SPECIAL_JUDGE, infile,
+                   outfile, userfile, usercode, PEflg, work_dir, topmemory,
+                   memoryLimit, solution_id, num_of_test, global_work_dir);
     return {ACflg, usedtime, topmemory, num_of_test};
 }
 

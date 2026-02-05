@@ -63,7 +63,7 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
                          int problemId, char *usercode, int num_of_test, string &global_work_dir,
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled, const int *syscall_template,
-                         const LanguageFactory &language_factory) {
+                         const LanguageFactory &language_factory, const CompareFactory &compare_factory) {
     int call_counter_local[call_array_size], PEflg;
     char infile[BUFFER_SIZE], outfile[BUFFER_SIZE], userfile[BUFFER_SIZE];
     int topmemory = 0;
@@ -79,7 +79,7 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
         return finish_run_with_id(pid, ACflg, SPECIAL_JUDGE, solution_id, language, topmemory, memoryLimit, usedtime,
                                   timeLimit, problemId, PEflg, work_dir, num_of_test, call_counter_local, infile,
                                   outfile, userfile, usercode, global_work_dir, config, env,
-                                  record_syscall, debug_enabled);
+                                  record_syscall, debug_enabled, language_factory, compare_factory);
     }
 }
 
@@ -91,7 +91,19 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
     return runJudgeTask(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
                         solution_id, timeLimit, usedtime, memoryLimit,
                         problemId, usercode, num_of_test, global_work_dir, config, env,
-                        record_syscall, debug_enabled, syscall_template, nullptr);
+                        record_syscall, debug_enabled, syscall_template, nullptr, nullptr);
+}
+
+JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair<string, int> &infilePair, int ACflg,
+                         int SPECIAL_JUDGE, int solution_id, double timeLimit, double usedtime, int memoryLimit,
+                         int problemId, char *usercode, int num_of_test, string &global_work_dir,
+                         const JudgeConfigSnapshot &config, const JudgeEnv &env,
+                         bool record_syscall, bool debug_enabled, const int *syscall_template,
+                         const LanguageFactory &language_factory) {
+    return runJudgeTask(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
+                        solution_id, timeLimit, usedtime, memoryLimit,
+                        problemId, usercode, num_of_test, global_work_dir, config, env,
+                        record_syscall, debug_enabled, syscall_template, language_factory, nullptr);
 }
 
 JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair<string, int> &infilePair, int ACflg,
@@ -102,7 +114,7 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
     return runJudgeTask(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
                         solution_id, timeLimit, usedtime, memoryLimit,
                         problemId, usercode, num_of_test, global_work_dir, config, env,
-                        record_syscall, debug_enabled, nullptr, nullptr);
+                        record_syscall, debug_enabled, nullptr, nullptr, nullptr);
 }
 
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
@@ -111,7 +123,8 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
                                    SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled,
-                                   const int *syscall_template, const LanguageFactory &language_factory) {
+                                   const int *syscall_template, const LanguageFactory &language_factory,
+                                   const CompareFactory &compare_factory) {
     struct ChunkResult {
         vector<JudgeResult> results;
     };
@@ -164,7 +177,7 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                              submissionInfo.getMemoryLimit(), submissionInfo.getProblemId(),
                                              usercode, int(i), global_work_dir, config, env,
                                              record_syscall, debug_enabled,
-                                             syscall_template, language_factory);
+                                             syscall_template, language_factory, compare_factory);
                 chunk.results.push_back(r);
             }
             return chunk;
@@ -184,10 +197,22 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    vector<pair<string, int>> &inFileList,
                                    int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
                                    SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
+                                   const JudgeEnv &env, bool record_syscall, bool debug_enabled,
+                                   const int *syscall_template, const LanguageFactory &language_factory) {
+    return runParallelJudge(runner_id, language, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
+                            ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo, config, env,
+                            record_syscall, debug_enabled, syscall_template, language_factory, nullptr);
+}
+
+JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
+                                   int usedtime, int memoryLimit,
+                                   vector<pair<string, int>> &inFileList,
+                                   int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
+                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled) {
     return runParallelJudge(runner_id, language, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
                             ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo, config, env,
-                            record_syscall, debug_enabled, nullptr, nullptr);
+                            record_syscall, debug_enabled, nullptr, nullptr, nullptr);
 }
 
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
@@ -199,5 +224,5 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    const int *syscall_template) {
     return runParallelJudge(runner_id, language, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
                             ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo, config, env,
-                            record_syscall, debug_enabled, syscall_template, nullptr);
+                            record_syscall, debug_enabled, syscall_template, nullptr, nullptr);
 }

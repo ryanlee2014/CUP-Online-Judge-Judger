@@ -16,7 +16,7 @@ void run_cases(int runner_id, int solution_id, JudgeContext &ctx, FlowState &sta
                                   state.global_work_dir,
                                   ctx.submission, ctx.config, ctx.env,
                                   ctx.flags.record_call != 0, ctx.flags.debug != 0, syscall_template_ptr,
-                                  ctx.language_factory);
+                                  ctx.language_factory, ctx.compare_factory);
         apply_parallel_result(r, state.num_of_test, ctx.time_limit, ctx.memory_limit, state.finalACflg,
                               state.ACflg, state.topmemory, state.usedtime,
                               state.max_case_time, state.pass_point, state.pass_rate, ctx.sender);

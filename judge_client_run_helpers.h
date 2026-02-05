@@ -57,6 +57,13 @@ JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int sol
                                int call_counter_local[call_array_size], char *infile, char *outfile, char *userfile,
                                char *usercode, std::string &global_work_dir, const JudgeConfigSnapshot &config,
                                const JudgeEnv &env, bool record_syscall, bool debug_enabled);
+JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int solution_id, int language,
+                               int &topmemory, int memoryLimit, double &usedtime, double timeLimit, int problemId,
+                               int &PEflg, char *work_dir, int num_of_test,
+                               int call_counter_local[call_array_size], char *infile, char *outfile, char *userfile,
+                               char *usercode, std::string &global_work_dir, const JudgeConfigSnapshot &config,
+                               const JudgeEnv &env, bool record_syscall, bool debug_enabled,
+                               const LanguageFactory &language_factory, const CompareFactory &compare_factory);
 
 }  // namespace judge_run_helpers
 
