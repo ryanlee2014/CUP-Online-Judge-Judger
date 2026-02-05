@@ -1,6 +1,7 @@
 #include "judge_client_run_io_helpers.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 #include "judge_client_run_helpers.h"
 
@@ -15,9 +16,18 @@ void prepare_io_paths(const char *work_dir, const char *inputFile, const char *u
 }
 
 void redirect_stdio(const std::string &input_path, const std::string &output_path, const std::string &error_path) {
-    freopen(input_path.c_str(), "r", stdin);
-    freopen(output_path.c_str(), "w", stdout);
-    freopen(error_path.c_str(), "a+", stderr);
+    if (!freopen(input_path.c_str(), "r", stdin)) {
+        perror("freopen stdin");
+        exit(1);
+    }
+    if (!freopen(output_path.c_str(), "w", stdout)) {
+        perror("freopen stdout");
+        exit(1);
+    }
+    if (!freopen(error_path.c_str(), "a+", stderr)) {
+        perror("freopen stderr");
+        exit(1);
+    }
 }
 
 }  // namespace judge_run_helpers

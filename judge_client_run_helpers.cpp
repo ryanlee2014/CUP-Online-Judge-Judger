@@ -63,7 +63,8 @@ void run_solution_common(int &lang, const JudgePaths &paths, const double &time_
                          const int &mem_lmt, double mem_cur_factor, double mem_max_factor,
                          const JudgeConfigSnapshot &config) {
     shared_ptr<Language> languageModel(getLanguageModel(lang));
-    nice(19);
+    int nice_result = nice(19);
+    (void) nice_result;
     set_child_work_dir(paths.work_dir.c_str());
     string input_path;
     string output_path;
@@ -79,7 +80,8 @@ void run_solution_common(int &lang, const JudgePaths &paths, const double &time_
                          const int &mem_lmt, double mem_cur_factor, double mem_max_factor,
                          const JudgeConfigSnapshot &config, const LanguageFactory &language_factory) {
     auto languageModel = language_factory ? language_factory(lang) : shared_ptr<Language>(getLanguageModel(lang));
-    nice(19);
+    int nice_result = nice(19);
+    (void) nice_result;
     set_child_work_dir(paths.work_dir.c_str());
     string input_path;
     string output_path;
