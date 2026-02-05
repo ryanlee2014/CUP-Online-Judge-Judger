@@ -37,7 +37,9 @@ void init_parameters(int argc, char **argv, int &solution_id,
         exit(1);
 #endif
     }
-    if (judge_util_helpers::parse_new_args(argc, argv, solution_id, runner_id, judgerId)) {
+    judge_util_helpers::ParsedArgs parsed;
+    if (judge_util_helpers::parse_new_args(argc, argv, parsed)) {
+        judge_util_helpers::apply_parsed_args(parsed, solution_id, runner_id, judgerId);
         return;
     }
     DEBUG = (argc > 4);
