@@ -17,18 +17,21 @@
 
 using namespace std;
 
-int judge_client_main_impl(int argc, char **argv) {
-    JudgeContext ctx;
-    FlowState state;
-    int runner_id = 0;
+namespace {
+void flow_prepare(int argc, char **argv, JudgeContext &ctx, FlowState &state, int &runner_id) {
     init_flow(argc, argv, ctx, state, solution_id, runner_id);
+}
+
+void flow_compile(JudgeContext &ctx, FlowState &state) {
     send_compiling_bundle(solution_id, ctx.env, ctx.sender);
     if (compile(ctx.lang, state.work_dir, ctx.env, ctx.config, ctx.flags.debug != 0) != COMPILED) {
         report_compile_error_and_exit(solution_id, ctx.judger_id, state.work_dir, ctx.env, ctx.sender);
     } else {
         umount(state.work_dir);
     }
+}
 
+void flow_test_run_if_needed(JudgeContext &ctx, FlowState &state) {
     ctx.language_model->buildRuntime(state.work_dir);
     if (ctx.p_id <= TEST_RUN_PROBLEM) {
         handle_test_run(solution_id, ctx.lang, ctx.p_id, ctx.special_judge, ctx.time_limit, ctx.memory_limit,
@@ -37,6 +40,9 @@ int judge_client_main_impl(int argc, char **argv) {
                         ctx.adapter, ctx.submission, ctx.language_model, ctx.config, ctx.env, ctx.sender,
                         ctx.flags.mysql_mode, ctx.flags.record_call != 0, ctx.flags.debug != 0);
     }
+}
+
+void flow_judge_all_cases(JudgeContext &ctx, FlowState &state, int runner_id) {
     int total_point = 0;
     vector<pair<string, int> > inFileList = getFileList(state.fullpath, isInFile);
     state.num_of_test = inFileList.size();
@@ -46,6 +52,9 @@ int judge_client_main_impl(int argc, char **argv) {
     const int *syscall_template_ptr = nullptr;
     prepare_syscall_template(ctx, syscall_template, syscall_template_ptr);
     run_cases(runner_id, solution_id, ctx, state, inFileList, syscall_template_ptr);
+}
+
+void flow_finalize(JudgeContext &ctx, FlowState &state) {
     finalize_result_and_send(state.ACflg, state.finalACflg, state.PEflg, solution_id, ctx.lang, ctx.p_id,
                              ctx.language_model,
                              ctx.time_limit, state.topmemory,
@@ -53,5 +62,17 @@ int judge_client_main_impl(int argc, char **argv) {
                              state.max_case_time, state.sim, state.sim_s_id, ctx.config,
                              state.work_dir, ctx.sender, ctx.flags.debug != 0);
     finalize_flow(ctx, state);
+}
+}  // namespace
+
+int judge_client_main_impl(int argc, char **argv) {
+    JudgeContext ctx;
+    FlowState state;
+    int runner_id = 0;
+    flow_prepare(argc, argv, ctx, state, runner_id);
+    flow_compile(ctx, state);
+    flow_test_run_if_needed(ctx, state);
+    flow_judge_all_cases(ctx, state, runner_id);
+    flow_finalize(ctx, state);
     return 0;
 }

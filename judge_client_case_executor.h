@@ -12,10 +12,7 @@ struct CaseExecutionLimits {
 };
 
 struct CaseExecutionIO {
-    char *work_dir = nullptr;
-    char *infile = nullptr;
-    char *outfile = nullptr;
-    char *userfile = nullptr;
+    JudgePaths *paths = nullptr;
     char *usercode = nullptr;
     std::string *global_work_dir = nullptr;
     const int *syscall_template = nullptr;

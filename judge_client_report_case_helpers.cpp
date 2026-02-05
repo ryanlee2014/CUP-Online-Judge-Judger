@@ -2,6 +2,8 @@
 
 #include "judge_client_case_executor.h"
 
+#include <cstdio>
+
 using namespace std;
 
 void run_single_testcase(JudgeContext &ctx, int runner_id, int solution_id,
@@ -17,10 +19,9 @@ void run_single_testcase(JudgeContext &ctx, int runner_id, int solution_id,
     input.limits.num_of_test = num_of_test;
     input.limits.memory_limit = memoryLimit;
     input.limits.time_limit = timeLimit;
-    input.io.work_dir = work_dir;
-    input.io.infile = infile;
-    input.io.outfile = outfile;
-    input.io.userfile = userfile;
+    JudgePaths case_paths;
+    case_paths.work_dir = work_dir;
+    input.io.paths = &case_paths;
     input.io.usercode = usercode;
     input.io.global_work_dir = &global_work_dir;
     input.io.syscall_template = syscall_template;
@@ -42,4 +43,7 @@ void run_single_testcase(JudgeContext &ctx, int runner_id, int solution_id,
     pass_rate = output.pass_rate;
     usedtime = output.usedtime;
     max_case_time = output.max_case_time;
+    std::snprintf(infile, BUFFER_SIZE, "%s", case_paths.infile.c_str());
+    std::snprintf(outfile, BUFFER_SIZE, "%s", case_paths.outfile.c_str());
+    std::snprintf(userfile, BUFFER_SIZE, "%s", case_paths.userfile.c_str());
 }

@@ -18,6 +18,31 @@
 using namespace std;
 using namespace judge_run_helpers;
 
+int compute_parallel_budget(const ParallelRunOptions &opts) {
+    int workers = max(int(thread::hardware_concurrency()), 1);
+    if (!opts.in_file_list) {
+        return workers;
+    }
+    const size_t total = opts.in_file_list->size();
+    if (total == 0) {
+        return 1;
+    }
+    int env_workers = read_env_int("JUDGE_PARALLEL_WORKERS");
+    if (env_workers > 0) {
+        workers = env_workers;
+    }
+    if (opts.memory_limit > 0) {
+        // Conservative cap: assume each worker may need at least 64MB.
+        int memory_cap = max(opts.memory_limit / 64, 1);
+        workers = min(workers, memory_cap);
+    }
+    workers = max(workers, 1);
+    if (static_cast<size_t>(workers) > total) {
+        workers = static_cast<int>(total);
+    }
+    return workers;
+}
+
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                            int &mem_lmt, int fileId, const JudgeConfigSnapshot &config) {
     char input[BUFFER_SIZE], userOutput[BUFFER_SIZE], errorOutput[BUFFER_SIZE];
@@ -155,7 +180,7 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
     struct ChunkResult {
         vector<JudgeResult> results;
     };
-    int workers = max(int(std::thread::hardware_concurrency()), 1);
+    int workers = compute_parallel_budget(opts);
     auto &inFileList = *opts.in_file_list;
     size_t total = inFileList.size();
     if (total == 0) {
@@ -173,13 +198,6 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
     }
     return finalResult;
 #endif
-    int env_workers = read_env_int("JUDGE_PARALLEL_WORKERS");
-    if (env_workers > 0) {
-        workers = env_workers;
-    }
-    if (total > 0 && static_cast<size_t>(workers) > total) {
-        workers = static_cast<int>(total);
-    }
     ThreadPool pool(workers);
     vector<future<ChunkResult>> result;
     size_t chunk_size = (total + workers - 1) / workers;

@@ -48,7 +48,9 @@ if (ENABLE_TESTS)
         tests/stub_easywsclient.cpp
         tests/judge_client_test.cpp
         tests/wsjudged_test.cpp
-        tests/judge_client_tests.cpp
+        tests/judge_client_flow_tests.cpp
+        tests/judge_client_run_tests.cpp
+        tests/judge_client_watch_tests.cpp
         tests/judge_lib_tests.cpp
         tests/language_tests.cpp
         tests/compare_tests.cpp

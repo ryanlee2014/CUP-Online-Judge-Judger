@@ -56,6 +56,8 @@ struct ParallelRunOptions {
     CompareFactory compare_factory;
 };
 
+int compute_parallel_budget(const ParallelRunOptions &opts);
+
 void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                   int &mem_lmt, const JudgeConfigSnapshot &config);
 void run_solution(int &lang, char *work_dir, const double &time_lmt, const double &usedtime,

@@ -184,43 +184,75 @@ static void add_usedtime(double &usedtime, const struct rusage &ruse) {
     usedtime += (ruse.ru_stime.tv_sec * 1000 + ruse.ru_stime.tv_usec / 1000);
 }
 
-static bool wait_and_update(pid_t pidApp, int &status, struct rusage &ruse, shared_ptr<Language> &languageModel,
-                            int mem_lmt, int &topmemory, int &ACflg, bool debug_enabled,
-                            const JudgeConfigSnapshot &config) {
-    wait4(pidApp, &status, 0, &ruse);
-    return update_memory_and_check(languageModel, ruse, pidApp, mem_lmt, topmemory, ACflg, debug_enabled, config);
+static WatchAction watch_phase_wait(WatchContext &ctx) {
+    wait4(ctx.pidApp, &ctx.status, 0, &ctx.ruse);
+    return WatchAction::Continue;
 }
 
-static bool process_watch_iteration(pid_t pidApp, int &status, struct rusage &ruse, shared_ptr<Language> &languageModel,
-                                    int mem_lmt, int &topmemory, int &ACflg, int isspj, const char *userfile,
-                                    const char *outfile, const char *errorFile, int solution_id, int *call_counter_local,
-                                    long &last_error_size, long outfile_size, bool check_io,
-                                    const WatchOptions &options) {
-    if (wait_and_update(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg,
-                        options.debug_enabled, *options.config)) {
-        return true;
+static WatchAction watch_phase_resource(WatchContext &ctx) {
+    if (update_memory_and_check(ctx.languageModel, ctx.ruse, ctx.pidApp, ctx.mem_lmt, ctx.state->topmemory,
+                                ctx.state->ACflg, ctx.options->debug_enabled, *ctx.options->config)) {
+        return WatchAction::Stop;
     }
-    if (WIFEXITED(status))
-        return true;
+    if (WIFEXITED(ctx.status)) {
+        return WatchAction::Stop;
+    }
+    return WatchAction::Continue;
+}
+
+static WatchAction watch_phase_io(WatchContext &ctx, bool check_io) {
     if (check_io) {
-        if (handle_error_conditions(languageModel, errorFile, ACflg, solution_id, pidApp, last_error_size,
-                                    options.debug_enabled, *options.config, *options.env, options.work_dir)) {
-            return true;
+        if (handle_error_conditions(ctx.languageModel, ctx.error_path.c_str(), ctx.state->ACflg, ctx.solution_id,
+                                    ctx.pidApp, ctx.state->last_error_size, ctx.options->debug_enabled,
+                                    *ctx.options->config, *ctx.options->env, ctx.options->work_dir)) {
+            return WatchAction::Stop;
         }
     }
-    if (handle_output_limit(isspj, userfile, outfile_size, ACflg, pidApp, *options.config)) {
-        return true;
+    if (handle_output_limit(ctx.isspj, ctx.userfile, ctx.state->outfile_size, ctx.state->ACflg, ctx.pidApp,
+                            *ctx.options->config)) {
+        return WatchAction::Stop;
     }
-    if (handle_exit_status(languageModel, status, ACflg, pidApp, options.debug_enabled,
-                           *options.config, options.work_dir)) {
-        return true;
+    return WatchAction::Continue;
+}
+
+static WatchAction watch_phase_exit(WatchContext &ctx) {
+    if (handle_exit_status(ctx.languageModel, ctx.status, ctx.state->ACflg, ctx.pidApp, ctx.options->debug_enabled,
+                           *ctx.options->config, ctx.options->work_dir)) {
+        return WatchAction::Stop;
     }
-    if (handle_signal_status(status, ACflg, options.debug_enabled, options.work_dir)) {
-        return true;
+    return WatchAction::Continue;
+}
+
+static WatchAction watch_phase_signal(WatchContext &ctx) {
+    if (handle_signal_status(ctx.status, ctx.state->ACflg, ctx.options->debug_enabled, ctx.options->work_dir)) {
+        return WatchAction::Stop;
     }
-    handle_ptrace_syscall(pidApp, ACflg, solution_id, call_counter_local,
-                          options.record_syscall, *options.config, *options.env, options.work_dir);
-    return false;
+    return WatchAction::Continue;
+}
+
+static WatchAction watch_phase_ptrace(WatchContext &ctx) {
+    handle_ptrace_syscall(ctx.pidApp, ctx.state->ACflg, ctx.solution_id, ctx.call_counter_local,
+                          ctx.options->record_syscall, *ctx.options->config, *ctx.options->env, ctx.options->work_dir);
+    return WatchAction::Continue;
+}
+
+static WatchAction run_watch_phase(WatchPhase phase, WatchContext &ctx, bool check_io) {
+    switch (phase) {
+        case WatchPhase::Wait:
+            return watch_phase_wait(ctx);
+        case WatchPhase::Resource:
+            return watch_phase_resource(ctx);
+        case WatchPhase::Io:
+            return watch_phase_io(ctx, check_io);
+        case WatchPhase::ExitCode:
+            return watch_phase_exit(ctx);
+        case WatchPhase::Signal:
+            return watch_phase_signal(ctx);
+        case WatchPhase::Ptrace:
+            return watch_phase_ptrace(ctx);
+        default:
+            return WatchAction::Continue;
+    }
 }
 
 static bool should_check_io(int &io_tick,
@@ -245,31 +277,53 @@ void watch_solution_common(pid_t pidApp, char *infile, int isspj,
                            char *userfile, char *outfile, int solution_id, int lang,
                            int mem_lmt, const char *errorFile, int *call_counter_local,
                            WatchState &state, const WatchOptions &options) {
-    shared_ptr<Language> languageModel(getLanguageModel(lang));
+    WatchContext context;
+    context.pidApp = pidApp;
+    context.isspj = isspj;
+    context.solution_id = solution_id;
+    context.lang = lang;
+    context.mem_lmt = mem_lmt;
+    context.call_counter_local = call_counter_local;
+    context.infile = infile;
+    context.userfile = userfile;
+    context.outfile = outfile;
+    context.errorFile = errorFile;
+    context.state = &state;
+    context.options = &options;
+    context.languageModel = shared_ptr<Language>(getLanguageModel(lang));
     if (options.debug_enabled) {
         printf("pid=%d judging %s\n", pidApp, infile);
     }
-    int status;
-    struct rusage ruse{};
     if (state.topmemory == 0) {
         state.topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
     }
-    const std::string error_path = judge_path_utils::join_path(options.work_dir, errorFile);
+    context.error_path = judge_path_utils::join_path(options.work_dir, errorFile);
     state.outfile_size = get_file_size(outfile);
     state.io_tick = 0;
     constexpr int io_check_interval = 16;
     constexpr int io_check_ms = 50;
+    constexpr WatchPhase kPhaseOrder[] = {
+            WatchPhase::Wait,
+            WatchPhase::Resource,
+            WatchPhase::Io,
+            WatchPhase::ExitCode,
+            WatchPhase::Signal,
+            WatchPhase::Ptrace};
     state.last_io_check = std::chrono::steady_clock::now();
     while (true) {
         bool check_io = should_check_io(state.io_tick, state.last_io_check, io_check_ms, io_check_interval);
-        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt,
-                                    state.topmemory, state.ACflg, isspj,
-                                    userfile, outfile, error_path.c_str(), solution_id, call_counter_local,
-                                    state.last_error_size, state.outfile_size, check_io, options)) {
+        bool should_stop = false;
+        for (WatchPhase phase : kPhaseOrder) {
+            if (run_watch_phase(phase, context, check_io) == WatchAction::Stop) {
+                should_stop = true;
+                break;
+            }
+        }
+        if (should_stop) {
             break;
         }
     }
-    add_usedtime(state.usedtime, ruse);
+    add_usedtime(state.usedtime, context.ruse);
 }
 
 }  // namespace judge_watch_helpers
