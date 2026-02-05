@@ -18,29 +18,54 @@
 using namespace std;
 using namespace judge_run_helpers;
 
-int compute_parallel_budget(const ParallelRunOptions &opts) {
-    int workers = max(int(thread::hardware_concurrency()), 1);
+namespace {
+struct ParallelBudgetDecision {
+    int workers = 1;
+    int env_workers = -1;
+    int memory_cap = -1;
+    size_t total_files = 0;
+};
+
+ParallelBudgetDecision decide_parallel_budget(const ParallelRunOptions &opts) {
+    ParallelBudgetDecision decision;
+    decision.workers = max(int(thread::hardware_concurrency()), 1);
     if (!opts.in_file_list) {
-        return workers;
+        return decision;
     }
-    const size_t total = opts.in_file_list->size();
-    if (total == 0) {
-        return 1;
+    decision.total_files = opts.in_file_list->size();
+    if (decision.total_files == 0) {
+        decision.workers = 1;
+        return decision;
     }
-    int env_workers = read_env_int("JUDGE_PARALLEL_WORKERS");
-    if (env_workers > 0) {
-        workers = env_workers;
+    decision.env_workers = read_env_int("JUDGE_PARALLEL_WORKERS");
+    if (decision.env_workers > 0) {
+        decision.workers = decision.env_workers;
     }
     if (opts.memory_limit > 0) {
         // Conservative cap: assume each worker may need at least 64MB.
-        int memory_cap = max(opts.memory_limit / 64, 1);
-        workers = min(workers, memory_cap);
+        decision.memory_cap = max(opts.memory_limit / 64, 1);
+        decision.workers = min(decision.workers, decision.memory_cap);
     }
-    workers = max(workers, 1);
-    if (static_cast<size_t>(workers) > total) {
-        workers = static_cast<int>(total);
+    decision.workers = max(decision.workers, 1);
+    if (static_cast<size_t>(decision.workers) > decision.total_files) {
+        decision.workers = static_cast<int>(decision.total_files);
     }
-    return workers;
+    return decision;
+}
+
+void log_parallel_budget_decision(const ParallelRunOptions &opts, const ParallelBudgetDecision &decision,
+                                  size_t chunk_size, int env_chunk) {
+    if (!opts.debug_enabled || !opts.env || opts.env->oj_home.empty()) {
+        return;
+    }
+    write_log(opts.env->oj_home.c_str(),
+              "parallel budget workers=%d total=%zu env_workers=%d memory_cap=%d chunk=%zu env_chunk=%d",
+              decision.workers, decision.total_files, decision.env_workers, decision.memory_cap, chunk_size, env_chunk);
+}
+}  // namespace
+
+int compute_parallel_budget(const ParallelRunOptions &opts) {
+    return decide_parallel_budget(opts).workers;
 }
 
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
@@ -180,7 +205,8 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
     struct ChunkResult {
         vector<JudgeResult> results;
     };
-    int workers = compute_parallel_budget(opts);
+    ParallelBudgetDecision budget = decide_parallel_budget(opts);
+    int workers = budget.workers;
     auto &inFileList = *opts.in_file_list;
     size_t total = inFileList.size();
     if (total == 0) {
@@ -206,6 +232,7 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
         chunk_size = static_cast<size_t>(env_chunk);
     }
     chunk_size = max<size_t>(1, min(chunk_size, total));
+    log_parallel_budget_decision(opts, budget, chunk_size, env_chunk);
     const int base_ac = *opts.ac_flag;
     result.reserve((total + chunk_size - 1) / chunk_size);
     for (size_t start = 0; start < total; start += chunk_size) {

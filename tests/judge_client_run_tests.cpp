@@ -1,4 +1,29 @@
 #include "test_common.h"
+#include "../judge_client_run.h"
+
+namespace {
+struct EnvVarGuard {
+    std::string key;
+    std::string old_value;
+    bool had_value = false;
+
+    explicit EnvVarGuard(const char *name) : key(name) {
+        const char *old = std::getenv(name);
+        if (old) {
+            had_value = true;
+            old_value = old;
+        }
+    }
+
+    ~EnvVarGuard() {
+        if (had_value) {
+            setenv(key.c_str(), old_value.c_str(), 1);
+        } else {
+            unsetenv(key.c_str());
+        }
+    }
+};
+}  // namespace
 
 TEST(JudgeClientRunJudgeTaskBranches) {
     test_hooks::reset();
@@ -111,6 +136,35 @@ TEST(JudgeClientRunParallelJudge) {
                                 inFileList, ac, 0, global, submission, make_config_snapshot(),
                                 env, record_syscall, debug_enabled);
     EXPECT_TRUE(res.pass_point >= 0);
+}
+
+TEST(JudgeClientParallelBudgetBranches) {
+    ParallelRunOptions opts;
+    EXPECT_TRUE(compute_parallel_budget(opts) >= 1);
+
+    std::vector<std::pair<std::string, int>> files = {{"1.in", 1}, {"2.in", 1}, {"3.in", 1}};
+    opts.in_file_list = &files;
+    opts.memory_limit = 1024;
+
+    {
+        EnvVarGuard guard("JUDGE_PARALLEL_WORKERS");
+        setenv("JUDGE_PARALLEL_WORKERS", "8", 1);
+        EXPECT_EQ(compute_parallel_budget(opts), 3);
+    }
+    {
+        EnvVarGuard guard("JUDGE_PARALLEL_WORKERS");
+        setenv("JUDGE_PARALLEL_WORKERS", "8", 1);
+        opts.memory_limit = 64;
+        EXPECT_EQ(compute_parallel_budget(opts), 1);
+    }
+    {
+        EnvVarGuard guard("JUDGE_PARALLEL_WORKERS");
+        setenv("JUDGE_PARALLEL_WORKERS", "bad", 1);
+        opts.memory_limit = 0;
+        int workers = compute_parallel_budget(opts);
+        EXPECT_TRUE(workers >= 1);
+        EXPECT_TRUE(workers <= 3);
+    }
 }
 
 

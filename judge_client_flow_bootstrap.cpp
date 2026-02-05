@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "header/static_var.h"
 #include "judge_client_compile.h"
+#include "judge_client_context_helpers.h"
 #include "judge_client_flow_prep_helpers.h"
 #include "judge_client_flow_socket_helpers.h"
 #include "judge_client_report.h"
@@ -18,16 +18,8 @@ void init_runtime_flags(int argc, char **argv, JudgeContext &ctx, int &solution_
     solution_id = DEFAULT_SOLUTION_ID;
     init_parameters(argc, argv, solution_id, runner_id, judgerId);
     ctx.judger_id = judgerId;
-    ctx.env.oj_home = oj_home;
-    ctx.env.http_baseurl = http_baseurl;
-    ctx.env.http_password = http_password;
+    apply_bootstrap_legacy_state(ctx);
     load_config(ctx);
-    ctx.flags.debug = DEBUG;
-    ctx.flags.record_call = record_call;
-    ctx.flags.admin = admin;
-    ctx.flags.no_sim = no_sim;
-    ctx.flags.mysql_mode = MYSQL_MODE;
-    ctx.flags.read_from_stdin = READ_FROM_STDIN;
     init_websocket_and_bundle(judgerId);
 }
 
