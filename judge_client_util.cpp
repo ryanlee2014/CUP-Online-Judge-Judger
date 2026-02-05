@@ -5,6 +5,9 @@
 #include <cstring>
 
 #include "header/static_var.h"
+#ifdef UNIT_TEST
+#include "tests/test_hooks.h"
+#endif
 #include "judge_client_util_helpers.h"
 #include "library/judge_lib.h"
 
@@ -15,13 +18,24 @@ extern int call_counter[call_array_size];
 void init_parameters(int argc, char **argv, int &solution_id,
                      int &runner_id, string &judgerId) {
     if (argc < 3) {
-        fprintf(stderr, "Usage:%s solution_id runner_id.\n", argv[0]);
-        fprintf(stderr, "Multi:%s solution_id runner_id judge_base_path.\n",
-                argv[0]);
-        fprintf(stderr,
-                "Debug:%s solution_id runner_id judge_base_path debug.\n",
-                argv[0]);
+        bool silent = false;
+#ifdef UNIT_TEST
+        silent = test_hooks::state().exit_throws;
+#endif
+        if (!silent) {
+            fprintf(stderr, "Usage:%s solution_id runner_id.\n", argv[0]);
+            fprintf(stderr, "Multi:%s solution_id runner_id judge_base_path.\n",
+                    argv[0]);
+            fprintf(stderr,
+                    "Debug:%s solution_id runner_id judge_base_path debug.\n",
+                    argv[0]);
+        }
+#ifdef UNIT_TEST
+        test_exit(1);
+        return;
+#else
         exit(1);
+#endif
     }
     if (judge_util_helpers::parse_new_args(argc, argv, solution_id, runner_id, judgerId)) {
         return;

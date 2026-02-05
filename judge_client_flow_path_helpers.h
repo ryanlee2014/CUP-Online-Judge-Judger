@@ -3,6 +3,8 @@
 
 #include <string>
 
-std::string build_problem_data_path(int problem_id);
+#include "judge_client_context.h"
+
+std::string build_problem_data_path(int problem_id, const JudgeEnv &env);
 
 #endif

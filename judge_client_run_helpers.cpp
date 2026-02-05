@@ -46,24 +46,59 @@ void run_solution_common(int &lang, char *work_dir, const double &time_lmt, cons
                          const int &mem_lmt, const char *inputFile, const char *userOutputFile,
                          const char *errorOutputFile, double mem_cur_factor, double mem_max_factor,
                          const JudgeConfigSnapshot &config) {
+    JudgePaths paths = build_case_paths(work_dir, inputFile, userOutputFile, errorOutputFile);
+    run_solution_common(lang, paths, time_lmt, usedtime, mem_lmt, mem_cur_factor, mem_max_factor, config);
+}
+
+void run_solution_common(int &lang, char *work_dir, const double &time_lmt, const double &usedtime,
+                         const int &mem_lmt, const char *inputFile, const char *userOutputFile,
+                         const char *errorOutputFile, double mem_cur_factor, double mem_max_factor,
+                         const JudgeConfigSnapshot &config, const LanguageFactory &language_factory) {
+    JudgePaths paths = build_case_paths(work_dir, inputFile, userOutputFile, errorOutputFile);
+    run_solution_common(lang, paths, time_lmt, usedtime, mem_lmt, mem_cur_factor, mem_max_factor, config,
+                        language_factory);
+}
+
+void run_solution_common(int &lang, const JudgePaths &paths, const double &time_lmt, const double &usedtime,
+                         const int &mem_lmt, double mem_cur_factor, double mem_max_factor,
+                         const JudgeConfigSnapshot &config) {
     shared_ptr<Language> languageModel(getLanguageModel(lang));
     nice(19);
-    set_child_work_dir(work_dir);
+    set_child_work_dir(paths.work_dir.c_str());
     string input_path;
     string output_path;
     string error_path;
-    prepare_io_paths(work_dir, inputFile, userOutputFile, errorOutputFile, input_path, output_path, error_path);
+    prepare_io_paths(paths.work_dir.c_str(), paths.infile.c_str(), paths.userfile.c_str(),
+                     paths.errorfile.c_str(), input_path, output_path, error_path);
     redirect_stdio(input_path, output_path, error_path);
-    configure_and_run(languageModel, work_dir, time_lmt, usedtime, mem_lmt, mem_cur_factor, mem_max_factor, config);
+    configure_and_run(languageModel, const_cast<char *>(paths.work_dir.c_str()), time_lmt, usedtime, mem_lmt,
+                      mem_cur_factor, mem_max_factor, config);
+}
+
+void run_solution_common(int &lang, const JudgePaths &paths, const double &time_lmt, const double &usedtime,
+                         const int &mem_lmt, double mem_cur_factor, double mem_max_factor,
+                         const JudgeConfigSnapshot &config, const LanguageFactory &language_factory) {
+    auto languageModel = language_factory ? language_factory(lang) : shared_ptr<Language>(getLanguageModel(lang));
+    nice(19);
+    set_child_work_dir(paths.work_dir.c_str());
+    string input_path;
+    string output_path;
+    string error_path;
+    prepare_io_paths(paths.work_dir.c_str(), paths.infile.c_str(), paths.userfile.c_str(),
+                     paths.errorfile.c_str(), input_path, output_path, error_path);
+    redirect_stdio(input_path, output_path, error_path);
+    configure_and_run(languageModel, const_cast<char *>(paths.work_dir.c_str()), time_lmt, usedtime, mem_lmt,
+                      mem_cur_factor, mem_max_factor, config);
 }
 
 void prepare_run_files_with_id(int language, int runner_id, const pair<string, int> &infilePair, int problemId,
                                char *work_dir, int num_of_test, int call_counter_local[call_array_size],
-                               char *infile, char *outfile, char *userfile, const int *syscall_template) {
+                               char *infile, char *outfile, char *userfile, const int *syscall_template,
+                               bool record_syscall) {
     if (syscall_template) {
         memcpy(call_counter_local, syscall_template, sizeof(int) * call_array_size);
     } else {
-        InitManager::initSyscallLimits(language, call_counter_local, record_call, call_array_size);
+        InitManager::initSyscallLimits(language, call_counter_local, record_syscall, call_array_size);
     }
     prepare_files_with_id(infilePair.first.c_str(), infilePair.second, infile, problemId, work_dir, outfile,
                           userfile, runner_id, num_of_test);
@@ -76,17 +111,19 @@ JudgeResult finish_run_with_id(pid_t pid, int &ACflg, int SPECIAL_JUDGE, int sol
                                int &PEflg, char *work_dir, int num_of_test,
                                int call_counter_local[call_array_size],
                                char *infile, char *outfile, char *userfile, char *usercode,
-                               string &global_work_dir, const JudgeConfigSnapshot &config) {
-    watch_solution_with_file_id(pid, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
-                                solution_id, language, topmemory, memoryLimit, usedtime, timeLimit,
-                                problemId, PEflg, work_dir, num_of_test, call_counter_local, config);
+                               string &global_work_dir, const JudgeConfigSnapshot &config,
+                               const JudgeEnv &env, bool record_syscall, bool debug_enabled) {
+    watch_solution_with_file_id_ex(pid, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
+                                   solution_id, language, topmemory, memoryLimit, usedtime, timeLimit,
+                                   problemId, PEflg, work_dir, num_of_test, call_counter_local, config,
+                                   env, record_syscall, debug_enabled);
     if (usedtime > timeLimit * 1000 || ACflg == TIME_LIMIT_EXCEEDED) {
         usedtime = timeLimit * 1000;
         ACflg = TIME_LIMIT_EXCEEDED;
     }
     judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, problemId, infile,
                    outfile, userfile, usercode, PEflg, language, work_dir, topmemory,
-                   memoryLimit, solution_id, num_of_test, global_work_dir, config);
+                   memoryLimit, solution_id, num_of_test, global_work_dir, config, env, debug_enabled);
     return {ACflg, usedtime, topmemory, num_of_test};
 }
 

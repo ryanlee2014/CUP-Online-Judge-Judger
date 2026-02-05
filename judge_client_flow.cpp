@@ -22,9 +22,9 @@ int judge_client_main_impl(int argc, char **argv) {
     FlowState state;
     int runner_id = 0;
     init_flow(argc, argv, ctx, state, solution_id, runner_id);
-    send_compiling_bundle(solution_id, ctx.sender);
-    if (compile(ctx.lang, state.work_dir) != COMPILED) {
-        report_compile_error_and_exit(solution_id, ctx.judger_id, state.work_dir, ctx.sender);
+    send_compiling_bundle(solution_id, ctx.env, ctx.sender);
+    if (compile(ctx.lang, state.work_dir, ctx.env, ctx.config, ctx.flags.debug != 0) != COMPILED) {
+        report_compile_error_and_exit(solution_id, ctx.judger_id, state.work_dir, ctx.env, ctx.sender);
     } else {
         umount(state.work_dir);
     }
@@ -34,14 +34,14 @@ int judge_client_main_impl(int argc, char **argv) {
         handle_test_run(solution_id, ctx.lang, ctx.p_id, ctx.special_judge, ctx.time_limit, ctx.memory_limit,
                         state.work_dir, state.infile, state.outfile, state.userfile, state.topmemory,
                         state.ACflg, state.PEflg, state.usedtime, ctx.judger_id,
-                        ctx.adapter, ctx.submission, ctx.language_model, ctx.config, ctx.sender,
-                        ctx.flags.record_call != 0, ctx.flags.debug != 0);
+                        ctx.adapter, ctx.submission, ctx.language_model, ctx.config, ctx.env, ctx.sender,
+                        ctx.flags.mysql_mode, ctx.flags.record_call != 0, ctx.flags.debug != 0);
     }
     int total_point = 0;
     vector<pair<string, int> > inFileList = getFileList(state.fullpath, isInFile);
     state.num_of_test = inFileList.size();
     total_point = state.num_of_test;
-    send_running_bundle(solution_id, total_point, true, ctx.sender);
+    send_running_bundle(solution_id, total_point, true, ctx.env, ctx.sender);
     vector<int> syscall_template(call_array_size);
     const int *syscall_template_ptr = nullptr;
     prepare_syscall_template(ctx, syscall_template, syscall_template_ptr);

@@ -5,7 +5,6 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -18,16 +17,13 @@
 #include <unistd.h>
 
 #include "header/static_var.h"
+#include "judge_client_path_utils.h"
 #include "library/judge_lib.h"
 #include "model/judge/language/Language.h"
 
 using namespace std;
 
 namespace judge_watch_helpers {
-
-std::string join_path(const char *base, const char *name) {
-    return (std::filesystem::path(base) / name).string();
-}
 
 #ifdef __i386
 #define REG_SYSCALL orig_eax
@@ -44,28 +40,26 @@ std::string join_path(const char *base, const char *name) {
 extern int call_counter[call_array_size];
 
 void build_parallel_error_name(int file_id, char *errorOutput) {
-    snprintf(errorOutput, BUFFER_SIZE, "error%d.out", file_id);
+    judge_path_utils::build_parallel_error_name(file_id, errorOutput);
 }
 
 static bool handle_error_conditions(shared_ptr<Language> &languageModel, const char *errorFile, int &ACflg,
                                     int solution_id, pid_t pidApp, long &last_error_size,
-                                    bool debug_enabled, const JudgeConfigSnapshot &config, const char *work_dir) {
+                                    bool debug_enabled, const JudgeConfigSnapshot &config,
+                                    const JudgeEnv &env, const char *work_dir) {
     long error_size = get_file_size(errorFile);
     bool has_error = error_size > 0;
     if (has_error && error_size != last_error_size) {
-        if (debug_enabled) {
-            cerr << "Catch error:" << endl;
-            fstream err(errorFile);
-            stringstream ss;
-            ss << err.rdbuf();
-            cerr << ss.str() << endl;
-        }
         fstream file(errorFile, ios::ate);
         stringstream buffer;
         buffer << file.rdbuf();
         string contents(buffer.str());
+        if (debug_enabled) {
+            cerr << "Catch error:" << endl;
+            cerr << contents << endl;
+        }
         if (contents.find("Killed") != std::string::npos) {
-            write_log(oj_home, contents.c_str());
+            write_log(env.oj_home.c_str(), contents.c_str());
             print_runtimeerror(contents.c_str(), work_dir);
             last_error_size = error_size;
             return true;
@@ -145,7 +139,8 @@ static bool handle_signal_status(int status, int &ACflg, bool debug_enabled, con
 }
 
 static void handle_ptrace_syscall(pid_t pidApp, int &ACflg, int solution_id, int *call_counter_local,
-                                  bool record_syscall, const JudgeConfigSnapshot &config, const char *work_dir) {
+                                  bool record_syscall, const JudgeConfigSnapshot &config,
+                                  const JudgeEnv &env, const char *work_dir) {
     if (config.use_ptrace) {
         struct user_regs_struct reg{};
         ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
@@ -158,7 +153,7 @@ static void handle_ptrace_syscall(pid_t pidApp, int &ACflg, int solution_id, int
             _error = string("Current Program use not allowed system call.\nSolution ID:") + to_string(solution_id) +
                      "\n";
             _error += string("Syscall ID:") + to_string(reg.REG_SYSCALL) + "\n";
-            write_log(oj_home, _error.c_str());
+            write_log(env.oj_home.c_str(), _error.c_str());
             print_runtimeerror(_error.c_str(), work_dir);
             ptrace(PTRACE_KILL, pidApp, NULL, NULL);
         }
@@ -199,30 +194,32 @@ static bool wait_and_update(pid_t pidApp, int &status, struct rusage &ruse, shar
 static bool process_watch_iteration(pid_t pidApp, int &status, struct rusage &ruse, shared_ptr<Language> &languageModel,
                                     int mem_lmt, int &topmemory, int &ACflg, int isspj, const char *userfile,
                                     const char *outfile, const char *errorFile, int solution_id, int *call_counter_local,
-                                    long &last_error_size, long outfile_size, bool check_io, bool record_syscall,
-                                    bool debug_enabled,
-                                    const JudgeConfigSnapshot &config, const char *work_dir) {
-    if (wait_and_update(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, debug_enabled, config)) {
+                                    long &last_error_size, long outfile_size, bool check_io,
+                                    const WatchOptions &options) {
+    if (wait_and_update(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg,
+                        options.debug_enabled, *options.config)) {
         return true;
     }
     if (WIFEXITED(status))
         return true;
     if (check_io) {
         if (handle_error_conditions(languageModel, errorFile, ACflg, solution_id, pidApp, last_error_size,
-                                    debug_enabled, config, work_dir)) {
+                                    options.debug_enabled, *options.config, *options.env, options.work_dir)) {
             return true;
         }
     }
-    if (handle_output_limit(isspj, userfile, outfile_size, ACflg, pidApp, config)) {
+    if (handle_output_limit(isspj, userfile, outfile_size, ACflg, pidApp, *options.config)) {
         return true;
     }
-    if (handle_exit_status(languageModel, status, ACflg, pidApp, debug_enabled, config, work_dir)) {
+    if (handle_exit_status(languageModel, status, ACflg, pidApp, options.debug_enabled,
+                           *options.config, options.work_dir)) {
         return true;
     }
-    if (handle_signal_status(status, ACflg, debug_enabled, work_dir)) {
+    if (handle_signal_status(status, ACflg, options.debug_enabled, options.work_dir)) {
         return true;
     }
-    handle_ptrace_syscall(pidApp, ACflg, solution_id, call_counter_local, record_syscall, config, work_dir);
+    handle_ptrace_syscall(pidApp, ACflg, solution_id, call_counter_local,
+                          options.record_syscall, *options.config, *options.env, options.work_dir);
     return false;
 }
 
@@ -244,38 +241,35 @@ static bool should_check_io(int &io_tick,
     return false;
 }
 
-void watch_solution_common(pid_t pidApp, char *infile, int &ACflg, int isspj,
+void watch_solution_common(pid_t pidApp, char *infile, int isspj,
                            char *userfile, char *outfile, int solution_id, int lang,
-                           int &topmemory, int mem_lmt, double &usedtime,
-                           const char *errorFile, int *call_counter_local,
-                           const JudgeConfigSnapshot &config, const char *work_dir, bool record_syscall,
-                           bool debug_enabled) {
+                           int mem_lmt, const char *errorFile, int *call_counter_local,
+                           WatchState &state, const WatchOptions &options) {
     shared_ptr<Language> languageModel(getLanguageModel(lang));
-    if (debug_enabled) {
+    if (options.debug_enabled) {
         printf("pid=%d judging %s\n", pidApp, infile);
     }
     int status;
     struct rusage ruse{};
-    long last_error_size = -1;
-    if (topmemory == 0) {
-        topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
+    if (state.topmemory == 0) {
+        state.topmemory = get_proc_status(pidApp, "VmRSS:") << 10;
     }
-    const std::string error_path = join_path(work_dir, errorFile);
-    long outfile_size = get_file_size(outfile);
-    int io_tick = 0;
+    const std::string error_path = judge_path_utils::join_path(options.work_dir, errorFile);
+    state.outfile_size = get_file_size(outfile);
+    state.io_tick = 0;
     constexpr int io_check_interval = 16;
     constexpr int io_check_ms = 50;
-    auto last_io_check = std::chrono::steady_clock::now();
+    state.last_io_check = std::chrono::steady_clock::now();
     while (true) {
-        bool check_io = should_check_io(io_tick, last_io_check, io_check_ms, io_check_interval);
-        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt, topmemory, ACflg, isspj,
+        bool check_io = should_check_io(state.io_tick, state.last_io_check, io_check_ms, io_check_interval);
+        if (process_watch_iteration(pidApp, status, ruse, languageModel, mem_lmt,
+                                    state.topmemory, state.ACflg, isspj,
                                     userfile, outfile, error_path.c_str(), solution_id, call_counter_local,
-                                    last_error_size, outfile_size, check_io, record_syscall, debug_enabled,
-                                    config, work_dir)) {
+                                    state.last_error_size, state.outfile_size, check_io, options)) {
             break;
         }
     }
-    add_usedtime(usedtime, ruse);
+    add_usedtime(state.usedtime, ruse);
 }
 
 }  // namespace judge_watch_helpers

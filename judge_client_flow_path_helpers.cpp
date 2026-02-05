@@ -2,8 +2,6 @@
 
 #include <string>
 
-#include "header/static_var.h"
-
-std::string build_problem_data_path(int problem_id) {
-    return std::string(oj_home) + "/data/" + std::to_string(problem_id);
+std::string build_problem_data_path(int problem_id, const JudgeEnv &env) {
+    return env.oj_home + "/data/" + std::to_string(problem_id);
 }

@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 
 #include "header/static_var.h"
 #include "library/judge_lib.h"
@@ -30,7 +31,9 @@ std::string build_test_run_output(int ACflg, double &usedtime, double timeLimit,
     if (test_run_out.length() > FOUR * ONE_KILOBYTE) {
         auto omit = to_string(test_run_out.length() - FOUR * ONE_KILOBYTE);
         test_run_out = test_run_out.substr(0, FOUR * ONE_KILOBYTE);
-        test_run_out += "\n......Omit " + omit + " characters.";
+        std::ostringstream suffix;
+        suffix << "\n......Omit " << omit << " characters.";
+        test_run_out += suffix.str();
     }
     if (debug_enabled) {
         cout << "test_run_out:" << endl << test_run_out << endl;

@@ -1,9 +1,9 @@
 #include "judge_client_report_helpers.h"
 
 #include <algorithm>
-#include <filesystem>
 #include <iostream>
 
+#include "judge_client_path_utils.h"
 #include "library/judge_lib.h"
 
 using namespace std;
@@ -23,7 +23,7 @@ void send_test_run_bundle(int solution_id, double usedtime, int topmemory, const
 }
 
 std::string join_report_path(const char *base, const char *name) {
-    return (std::filesystem::path(base) / name).string();
+    return judge_path_utils::join_path(base, name);
 }
 
 void update_bundle_progress(double usedtime, int topmemory, double timeLimit, int memoryLimit,

@@ -18,7 +18,16 @@ void init_runtime_flags(int argc, char **argv, JudgeContext &ctx, int &solution_
     solution_id = DEFAULT_SOLUTION_ID;
     init_parameters(argc, argv, solution_id, runner_id, judgerId);
     ctx.judger_id = judgerId;
+    ctx.env.oj_home = oj_home;
+    ctx.env.http_baseurl = http_baseurl;
+    ctx.env.http_password = http_password;
     load_config(ctx);
+    ctx.flags.debug = DEBUG;
+    ctx.flags.record_call = record_call;
+    ctx.flags.admin = admin;
+    ctx.flags.no_sim = no_sim;
+    ctx.flags.mysql_mode = MYSQL_MODE;
+    ctx.flags.read_from_stdin = READ_FROM_STDIN;
     init_websocket_and_bundle(judgerId);
 }
 
@@ -38,7 +47,8 @@ void init_flow(int argc, char **argv, JudgeContext &ctx, FlowState &state,
 void finalize_flow(const JudgeContext &ctx, const FlowState &state) {
     finalize_submission(ctx.judger_id, const_cast<char *>(state.work_dir));
     if (ctx.flags.debug) {
-        write_log(oj_home, "result=%d", ctx.config.all_test_mode ? state.finalACflg : state.ACflg);
+        write_log(ctx.env.oj_home.c_str(),
+                  "result=%d", ctx.config.all_test_mode ? state.finalACflg : state.ACflg);
     }
     if (ctx.flags.record_call) {
         print_call_array();

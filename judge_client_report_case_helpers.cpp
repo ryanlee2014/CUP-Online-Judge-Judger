@@ -23,32 +23,32 @@ static pid_t fork_and_run_child(F fn) {
     return pid;
 }
 
-void run_single_testcase(int lang, int runner_id, int solution_id, int p_id, int SPECIAL_JUDGE,
+void run_single_testcase(JudgeContext &ctx, int runner_id, int solution_id,
                          int num_of_test, int memoryLimit, double timeLimit, char *work_dir,
                          char *infile, char *outfile, char *userfile, char *usercode,
                          string &global_work_dir, int &topmemory, int &ACflg, int &PEflg,
                          int &pass_point, double &pass_rate, int &finalACflg, double &usedtime,
                          double &max_case_time, const int *syscall_template,
-                         const pair<string, int> &infilePair, const JudgeConfigSnapshot &config,
-                         bool record_syscall, bool debug_enabled) {
-    prepare_files(infilePair.first.c_str(), infilePair.second, infile, p_id, work_dir, outfile,
+                         const pair<string, int> &infilePair) {
+    prepare_files(infilePair.first.c_str(), infilePair.second, infile, ctx.p_id, work_dir, outfile,
                   userfile, runner_id);
     if (syscall_template) {
         memcpy(call_counter, syscall_template, sizeof(int) * call_array_size);
     } else {
-        InitManager::initSyscallLimits(lang, call_counter, record_call, call_array_size);
+        InitManager::initSyscallLimits(ctx.lang, call_counter, ctx.flags.record_call != 0, call_array_size);
     }
     pid_t pidApp = fork_and_run_child([&]() {
-        run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit, config);
+        run_solution(ctx.lang, work_dir, timeLimit, usedtime, memoryLimit, ctx.config, ctx.language_factory);
     });
     if (pidApp != CHILD_PROCESS) {
-        watch_solution_ex(pidApp, infile, ACflg, SPECIAL_JUDGE, userfile, outfile,
-                          solution_id, lang, topmemory, memoryLimit, usedtime, timeLimit,
-                          p_id, PEflg, work_dir, config, record_syscall, debug_enabled);
-        judge_solution(ACflg, usedtime, timeLimit, SPECIAL_JUDGE, p_id, infile,
-                       outfile, userfile, usercode, PEflg, lang, work_dir, topmemory,
-                       memoryLimit, solution_id, num_of_test, global_work_dir, config);
-        if (config.use_max_time) {
+        watch_solution_ex(pidApp, infile, ACflg, ctx.special_judge, userfile, outfile,
+                          solution_id, ctx.lang, topmemory, memoryLimit, usedtime, timeLimit,
+                          ctx.p_id, PEflg, work_dir, ctx.config, ctx.env,
+                          ctx.flags.record_call != 0, ctx.flags.debug != 0);
+        judge_solution(ctx, ACflg, usedtime, timeLimit, ctx.special_judge, infile,
+                       outfile, userfile, usercode, PEflg, work_dir, topmemory,
+                       memoryLimit, solution_id, num_of_test, global_work_dir);
+        if (ctx.config.use_max_time) {
             max_case_time = max(usedtime, max_case_time);
             usedtime = ZERO_TIME;
         }
@@ -64,7 +64,7 @@ void run_single_testcase(int lang, int runner_id, int solution_id, int p_id, int
         ++pass_point;
     }
 
-    if (config.all_test_mode) {
+    if (ctx.config.all_test_mode) {
         if (ACflg == ACCEPT) {
             ++pass_rate;
         }

@@ -4,15 +4,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <unistd.h>
 
 #include "header/static_var.h"
+#include "judge_client_path_utils.h"
 
 namespace judge_run_helpers {
 
 std::string join_path(const char *base, const char *name) {
-    return (std::filesystem::path(base) / name).string();
+    return judge_path_utils::join_path(base, name);
 }
 
 void set_child_work_dir(const char *work_dir) {
@@ -35,9 +35,17 @@ int read_env_int(const char *name) {
 }
 
 void build_parallel_io_names(int file_id, char *input, char *userOutput, char *errorOutput) {
-    snprintf(input, BUFFER_SIZE, "data%d.in", file_id);
-    snprintf(userOutput, BUFFER_SIZE, "user%d.out", file_id);
-    snprintf(errorOutput, BUFFER_SIZE, "error%d.out", file_id);
+    judge_path_utils::build_parallel_io_names(file_id, input, userOutput, errorOutput);
+}
+
+JudgePaths build_case_paths(const char *work_dir, const char *inputFile,
+                            const char *userOutputFile, const char *errorOutputFile) {
+    JudgePaths paths;
+    paths.work_dir = work_dir;
+    paths.infile = inputFile;
+    paths.userfile = userOutputFile;
+    paths.errorfile = errorOutputFile;
+    return paths;
 }
 
 }  // namespace judge_run_helpers

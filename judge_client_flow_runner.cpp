@@ -14,7 +14,9 @@ void run_cases(int runner_id, int solution_id, JudgeContext &ctx, FlowState &sta
         auto r = runParallelJudge(runner_id, ctx.lang, state.work_dir, ctx.usercode, ctx.time_limit, state.usedtime,
                                   ctx.memory_limit, inFileList, state.ACflg, ctx.special_judge,
                                   state.global_work_dir,
-                                  ctx.submission, ctx.config, syscall_template_ptr);
+                                  ctx.submission, ctx.config, ctx.env,
+                                  ctx.flags.record_call != 0, ctx.flags.debug != 0, syscall_template_ptr,
+                                  ctx.language_factory);
         apply_parallel_result(r, state.num_of_test, ctx.time_limit, ctx.memory_limit, state.finalACflg,
                               state.ACflg, state.topmemory, state.usedtime,
                               state.max_case_time, state.pass_point, state.pass_rate, ctx.sender);
@@ -27,15 +29,13 @@ void run_cases(int runner_id, int solution_id, JudgeContext &ctx, FlowState &sta
         }
 
         if (state.ACflg <= PRESENTATION_ERROR) {
-            run_single_testcase(ctx.lang, runner_id, solution_id, ctx.p_id, ctx.special_judge,
-                                state.num_of_test,
+            run_single_testcase(ctx, runner_id, solution_id, state.num_of_test,
                                 ctx.memory_limit, ctx.time_limit, state.work_dir, state.infile, state.outfile,
                                 state.userfile,
                                 ctx.usercode,
                                 state.global_work_dir, state.topmemory, state.ACflg, state.PEflg,
                                 state.pass_point, state.pass_rate, state.finalACflg,
-                                state.usedtime, state.max_case_time, syscall_template_ptr, infilePair,
-                                ctx.config, ctx.flags.record_call != 0, ctx.flags.debug != 0);
+                                state.usedtime, state.max_case_time, syscall_template_ptr, infilePair);
         }
         send_progress_update(state.usedtime,
                              state.topmemory,

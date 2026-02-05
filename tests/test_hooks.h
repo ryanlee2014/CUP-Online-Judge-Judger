@@ -22,6 +22,7 @@ struct ExitException {
 };
 
 struct State {
+    pid_t main_pid = 0;
     std::deque<int> fork_results;
     int default_fork_result = 123;
     int waitpid_status = 0;
@@ -53,7 +54,7 @@ struct State {
     int pipe_errno = 0;
     bool pipe_keep_open = false;
     int pipe_keep_fd = -1;
-    bool exit_throws = true;
+    bool exit_throws = false;
     int last_exit_code = 0;
 };
 
@@ -77,6 +78,7 @@ pid_t test_wait4(pid_t pid, int *status, int options, struct rusage *rusage) TES
 int test_execvp(const char *file, char *const argv[]) TEST_HOOKS_THROW;
 int test_execv(const char *path, char *const argv[]) TEST_HOOKS_THROW;
 int test_execl(const char *path, const char *arg, ...) TEST_HOOKS_THROW;
+int test_execve(const char *path, char *const argv[], char *const envp[]) TEST_HOOKS_THROW;
 long test_ptrace(enum __ptrace_request request, ...) TEST_HOOKS_THROW;
 int test_setrlimit(int resource, const struct rlimit *rlim) TEST_HOOKS_THROW;
 unsigned int test_alarm(unsigned int seconds) TEST_HOOKS_THROW;
@@ -101,6 +103,7 @@ int test_seccomp_load(scmp_filter_ctx ctx) TEST_HOOKS_THROW;
 #define execvp test_execvp
 #define execv test_execv
 #define execl test_execl
+#define execve test_execve
 #define ptrace test_ptrace
 #define setrlimit test_setrlimit
 #define alarm test_alarm

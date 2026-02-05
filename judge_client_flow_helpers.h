@@ -26,6 +26,6 @@ struct FlowState {
     int num_of_test = 0;
 };
 
-std::string build_run_dir(int runner_id);
+std::string build_run_dir(int runner_id, const JudgeEnv &env);
 void prepare_work_dir(const JudgeConfigSnapshot &config, char *work_dir);
 void prepare_environment(JudgeContext &ctx, int runner_id, FlowState &state);

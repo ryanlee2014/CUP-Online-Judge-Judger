@@ -3,16 +3,18 @@
 struct BundleBuilder {
     enum class Kind { Compiling, Running };
 
-    static void set_identity(int solution_id) {
-        bundle.setJudger(http_username);
+    static void set_identity(int solution_id, const JudgeEnv &env) {
+        std::string judger = env.http_username;
+        bundle.setJudger(judger);
         bundle.setSolutionID(solution_id);
     }
 
-    static void build(Kind kind, int solution_id, int total_point = 0, bool include_total = false) {
+    static void build(Kind kind, int solution_id, const JudgeEnv &env,
+                      int total_point = 0, bool include_total = false) {
         if (kind == Kind::Compiling) {
             bundle.clear();
         }
-        set_identity(solution_id);
+        set_identity(solution_id, env);
         if (kind == Kind::Compiling) {
             bundle.setResult(COMPILING);
             bundle.setFinished(NOT_FINISHED);
@@ -29,13 +31,14 @@ struct BundleBuilder {
     }
 };
 
-void send_compiling_bundle(int solution_id, const ResultSender &sender) {
-    BundleBuilder::build(BundleBuilder::Kind::Compiling, solution_id);
+void send_compiling_bundle(int solution_id, const JudgeEnv &env, const ResultSender &sender) {
+    BundleBuilder::build(BundleBuilder::Kind::Compiling, solution_id, env);
     sender(bundle.toJSONString());
 }
 
-void send_running_bundle(int solution_id, int total_point, bool include_total, const ResultSender &sender) {
-    BundleBuilder::build(BundleBuilder::Kind::Running, solution_id, total_point, include_total);
+void send_running_bundle(int solution_id, int total_point, bool include_total,
+                         const JudgeEnv &env, const ResultSender &sender) {
+    BundleBuilder::build(BundleBuilder::Kind::Running, solution_id, env, total_point, include_total);
     sender(bundle.toJSONString());
 }
 

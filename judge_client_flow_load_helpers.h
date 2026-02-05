@@ -4,7 +4,7 @@
 #include "judge_client_context.h"
 #include "judge_client_flow_helpers.h"
 
-void load_language_cache();
+void load_language_cache(const JudgeEnv &env);
 void load_submission_data(JudgeContext &ctx, FlowState &state);
 
 #endif

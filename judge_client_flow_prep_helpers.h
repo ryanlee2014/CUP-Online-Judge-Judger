@@ -6,7 +6,7 @@
 #include "judge_client_context.h"
 
 void load_language_name_cached(const std::string &path);
-std::string build_run_dir(int runner_id);
+std::string build_run_dir(int runner_id, const JudgeEnv &env);
 void prepare_work_dir(const JudgeConfigSnapshot &config, char *work_dir);
 
 #endif

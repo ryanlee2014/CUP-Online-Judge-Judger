@@ -26,9 +26,9 @@ void load_language_name_cached(const std::string &path) {
     languageNameReader.loadFile(path);
 }
 
-std::string build_run_dir(int runner_id) {
+std::string build_run_dir(int runner_id, const JudgeEnv &env) {
     char work_dir[BUFFER_SIZE];
-    snprintf(work_dir, sizeof(work_dir), "%s/run%d/", oj_home, runner_id);
+    snprintf(work_dir, sizeof(work_dir), "%s/run%d/", env.oj_home.c_str(), runner_id);
     return string(work_dir);
 }
 

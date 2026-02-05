@@ -1,14 +1,14 @@
 #include "judge_client_context.h"
 
+#include "judge_client_compile_helpers.h"
 #include "judge_client_context_helpers.h"
-#include "judge_client_compile.h"
 
 using namespace std;
 
 void load_config(JudgeContext &ctx) {
-    init_mysql_conf();
-    ctx.config = capture_config_snapshot();
-    ctx.flags = capture_runtime_flags();
+    string config_path = ctx.env.oj_home + "/etc/config.json";
+    MysqlConfigValues cfg = read_mysql_config(config_path);
+    apply_mysql_config(cfg, ctx);
 }
 
 void load_submission(JudgeContext &ctx, char *work_dir) {

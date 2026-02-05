@@ -30,6 +30,7 @@ void reset() {
         g_state.pipe_keep_fd = -1;
     }
     g_state = State();
+    g_state.main_pid = getpid();
     clear_mysql_results();
 }
 } // namespace test_hooks
@@ -43,6 +44,29 @@ pid_t test_fork() TEST_HOOKS_THROW {
     }
     return st.default_fork_result;
 }
+
+#ifdef UNIT_TEST
+#undef fork
+extern "C" pid_t fork(void) {
+    return test_fork();
+}
+
+extern "C" pid_t vfork(void) {
+    return test_fork();
+}
+
+extern "C" pid_t __fork(void) {
+    return test_fork();
+}
+
+extern "C" pid_t __libc_fork(void) {
+    return test_fork();
+}
+
+extern "C" pid_t __vfork(void) {
+    return test_fork();
+}
+#endif
 
 pid_t test_waitpid(pid_t pid, int *status, int options) TEST_HOOKS_THROW {
     (void)pid;
@@ -92,6 +116,59 @@ int test_execl(const char *path, const char *arg, ...) TEST_HOOKS_THROW {
     test_hooks::state().last_exec_path = path ? path : "";
     return 0;
 }
+
+int test_execve(const char *path, char *const argv[], char *const envp[]) TEST_HOOKS_THROW {
+    (void)argv;
+    (void)envp;
+    test_hooks::state().last_exec_path = path ? path : "";
+    return 0;
+}
+
+#ifdef UNIT_TEST
+#undef execv
+#undef execvp
+#undef execl
+ #undef execve
+extern "C" int execv(const char *path, char *const argv[]) {
+    return test_execv(path, argv);
+}
+
+extern "C" int execvp(const char *file, char *const argv[]) {
+    return test_execvp(file, argv);
+}
+
+extern "C" int execl(const char *path, const char *arg, ...) {
+    return test_execl(path, arg);
+}
+
+extern "C" int execve(const char *path, char *const argv[], char *const envp[]) {
+    return test_execve(path, argv, envp);
+}
+
+extern "C" int __execv(const char *path, char *const argv[]) {
+    return test_execv(path, argv);
+}
+
+extern "C" int __execvp(const char *file, char *const argv[]) {
+    return test_execvp(file, argv);
+}
+
+extern "C" int __libc_execv(const char *path, char *const argv[]) {
+    return test_execv(path, argv);
+}
+
+extern "C" int __libc_execvp(const char *file, char *const argv[]) {
+    return test_execvp(file, argv);
+}
+
+extern "C" int __execve(const char *path, char *const argv[], char *const envp[]) {
+    return test_execve(path, argv, envp);
+}
+
+extern "C" int __libc_execve(const char *path, char *const argv[], char *const envp[]) {
+    return test_execve(path, argv, envp);
+}
+#endif
 
 long test_ptrace(enum __ptrace_request request, ...) TEST_HOOKS_THROW {
     va_list args;
@@ -327,7 +404,28 @@ char *test_dlerror(void) TEST_HOOKS_THROW {
     return nullptr;
 }
 
+#ifdef UNIT_TEST
+#undef dlopen
+#undef dlsym
+#undef dlerror
+extern "C" void *dlopen(const char *filename, int flag) {
+    return test_dlopen(filename, flag);
+}
+
+extern "C" void *dlsym(void *handle, const char *symbol) {
+    return test_dlsym(handle, symbol);
+}
+
+extern "C" char *dlerror(void) {
+    return test_dlerror();
+}
+#endif
+
 void test_exit(int code) {
+    auto &st = test_hooks::state();
+    if (st.main_pid != 0 && getpid() != st.main_pid) {
+        _Exit(code);
+    }
     test_hooks::state().last_exit_code = code;
     if (test_hooks::state().exit_throws) {
         throw test_hooks::ExitException{code};
