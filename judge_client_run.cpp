@@ -8,6 +8,7 @@
 
 #include "header/static_var.h"
 #include "judge_client_context.h"
+#include "judge_client_process_utils.h"
 #include "judge_client_run_helpers.h"
 #include "judge_client_watch.h"
 #include "library/judge_lib.h"
@@ -69,7 +70,7 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
     int topmemory = 0;
     prepare_run_files_with_id(language, runner_id, infilePair, problemId, work_dir, num_of_test, call_counter_local,
                               infile, outfile, userfile, syscall_template, record_syscall);
-    auto pid = fork_and_run_child([&]() {
+    auto pid = spawn_child([&]() {
         run_solution_parallel(language, work_dir, timeLimit, usedtime, memoryLimit, num_of_test, config,
                               language_factory);
     });

@@ -21,16 +21,6 @@ using namespace std;
 
 extern int call_counter[call_array_size];
 
-template <typename F>
-static pid_t fork_and_run_child(F fn) {
-    pid_t pid = fork();
-    if (pid == CHILD_PROCESS) {
-        fn();
-        exit(0);
-    }
-    return pid;
-}
-
 double clamp_time_limit(double timeLimit) {
     if (timeLimit > 300 * SECOND || timeLimit < ZERO) {
         return 300 * SECOND;

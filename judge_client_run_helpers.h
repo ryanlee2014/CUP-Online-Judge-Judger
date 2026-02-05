@@ -5,7 +5,6 @@
 #include <utility>
 
 #include <sys/types.h>
-#include <unistd.h>
 
 #include "judge_client_context.h"
 #include "judge_client_run_path_helpers.h"
@@ -35,16 +34,6 @@ void run_solution_common(int &lang, const JudgePaths &paths, const double &time_
 void run_solution_common(int &lang, const JudgePaths &paths, const double &time_lmt, const double &usedtime,
                          const int &mem_lmt, double mem_cur_factor, double mem_max_factor,
                          const JudgeConfigSnapshot &config, const LanguageFactory &language_factory);
-
-template <typename F>
-pid_t fork_and_run_child(F fn) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        fn();
-        exit(0);
-    }
-    return pid;
-}
 
 void prepare_run_files_with_id(int language, int runner_id, const std::pair<std::string, int> &infilePair,
                                int problemId, char *work_dir, int num_of_test,

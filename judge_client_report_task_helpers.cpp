@@ -4,6 +4,7 @@
 #include <string>
 
 #include "header/static_var.h"
+#include "judge_client_process_utils.h"
 #include "judge_client_report_bundle_helpers.h"
 #include "judge_client_report_helpers.h"
 #include "judge_client_report_test_run_helpers.h"
@@ -15,16 +16,6 @@
 using namespace std;
 
 extern int call_counter[call_array_size];
-
-template <typename F>
-static pid_t fork_and_run_child(F fn) {
-    pid_t pid = fork();
-    if (pid == CHILD_PROCESS) {
-        fn();
-        exit(0);
-    }
-    return pid;
-}
 
 static void prepare_test_run_input(int solution_id, int lang, char *work_dir,
                                    shared_ptr<ISubmissionAdapter> &adapter, SubmissionInfo &submissionInfo,
@@ -46,7 +37,7 @@ static void execute_test_run(int solution_id, int lang, int p_id, int SPECIAL_JU
                              const string &judgerId, shared_ptr<Language> &languageModel,
                              const JudgeConfigSnapshot &config, const JudgeEnv &env,
                              const ResultSender &sender, bool record_syscall, bool debug_enabled) {
-    pid_t pidApp = fork_and_run_child([&]() {
+    pid_t pidApp = spawn_child([&]() {
         run_solution(lang, work_dir, timeLimit, usedtime, memoryLimit, config);
     });
     if (pidApp != CHILD_PROCESS) {
