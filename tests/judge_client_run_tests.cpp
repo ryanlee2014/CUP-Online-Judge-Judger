@@ -27,10 +27,10 @@ struct EnvVarGuard {
 
 TEST(JudgeClientRunJudgeTaskBranches) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     std::filesystem::create_directories(tmp.path / "data" / "1");
     write_file(tmp.path / "data" / "1" / "1.in", "");
@@ -61,6 +61,7 @@ TEST(JudgeClientRunJudgeTaskBranches) {
         close(stderr_fd);
     }
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard_after_reset;
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     test_hooks::state().compare_result = ACCEPT;
     test_hooks::state().wait4_status = 0;
@@ -84,10 +85,10 @@ TEST(JudgeClientRunJudgeTaskBranches) {
 
 TEST(JudgeClientRunJudgeTaskTimeLimitClamp) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     std::filesystem::create_directories(tmp.path / "data" / "1");
     write_file(tmp.path / "data" / "1" / "1.in", "");
@@ -113,11 +114,11 @@ TEST(JudgeClientRunJudgeTaskTimeLimitClamp) {
 
 TEST(JudgeClientRunParallelJudge) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     reset_globals_for_test();
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     std::filesystem::create_directories(tmp.path / "data" / "1");
     write_file(tmp.path / "data" / "1" / "1.in", "");
@@ -170,10 +171,11 @@ TEST(JudgeClientParallelBudgetBranches) {
 
 TEST(JudgeClientMySQLSim) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     reset_globals_for_test();
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
+    (void)make_env_with_home(root);
     std::filesystem::create_directories(tmp.path / "etc");
     std::filesystem::create_directories(tmp.path / "data" / "100");
     write_file(tmp.path / "data" / "100" / "1.in", "");
@@ -207,6 +209,7 @@ TEST(JudgeClientMySQLSim) {
 
 TEST(JudgeClientCompileError) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().compile_result = 1;
     TempDir tmp;
     write_basic_config(tmp.path, false, false);
@@ -228,6 +231,7 @@ TEST(JudgeClientCompileError) {
 
 TEST(JudgeClientMySQLStartFailure) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().mysql_start_ok = false;
     TempDir tmp;
     write_basic_config(tmp.path, false, false);
@@ -245,6 +249,7 @@ TEST(JudgeClientMySQLStartFailure) {
 
 TEST(JudgeClientMySQLCompileError) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().compile_result = 1;
     test_hooks::state().mysql_start_ok = true;
     test_hooks::state().mysql_problem_id = 1001;
@@ -266,6 +271,7 @@ TEST(JudgeClientMySQLCompileError) {
 
 TEST(JudgeClientSequential) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().compile_result = 0;
     test_hooks::state().compare_result = ACCEPT;
     TempDir tmp;
@@ -289,6 +295,7 @@ TEST(JudgeClientSequential) {
 
 TEST(JudgeClientParallel) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().compile_result = 0;
     test_hooks::state().compare_result = ACCEPT;
     TempDir tmp;
@@ -312,6 +319,7 @@ TEST(JudgeClientParallel) {
 
 TEST(JudgeClientTestRun) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().compile_result = 0;
     test_hooks::state().wait4_status = SIGXCPU << 8;
     TempDir tmp;
@@ -333,6 +341,7 @@ TEST(JudgeClientTestRun) {
 
 TEST(JudgeClientRuntimeInfoBranches) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     test_hooks::state().compile_result = 0;
     test_hooks::state().compare_result = WRONG_ANSWER;
     TempDir tmp;
@@ -367,4 +376,6 @@ TEST(JudgeClientRuntimeInfoBranches) {
     rc = judge_client_main(argc2, const_cast<char **>(argv2));
     EXPECT_EQ(rc, 0);
 }
+
+
 

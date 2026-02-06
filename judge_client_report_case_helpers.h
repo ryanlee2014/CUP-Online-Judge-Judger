@@ -4,15 +4,22 @@
 #include <string>
 #include <utility>
 
+#include "judge_client_case_executor.h"
 #include "judge_client_context.h"
 #include "model/judge/language/Language.h"
 
-void run_single_testcase(JudgeContext &ctx, int runner_id, int solution_id,
-                         int num_of_test, int memoryLimit, double timeLimit, char *work_dir,
-                         char *infile, char *outfile, char *userfile, char *usercode,
-                         std::string &global_work_dir, int &topmemory, int &ACflg, int &PEflg,
-                         int &pass_point, double &pass_rate, int &finalACflg, double &usedtime,
-                         double &max_case_time, const int *syscall_template,
-                         const std::pair<std::string, int> &infilePair);
+struct RunSingleTestcaseRequest {
+    int runner_id = 0;
+    int solution_id = 0;
+    int num_of_test = 0;
+    int memory_limit = 0;
+    double time_limit = 0;
+    char *usercode = nullptr;
+    const int *syscall_template = nullptr;
+    const std::pair<std::string, int> *infile_pair = nullptr;
+};
+
+void run_single_testcase(JudgeContext &ctx, const RunSingleTestcaseRequest &request,
+                         JudgePaths &paths, std::string &global_work_dir, CaseExecutionState &state);
 
 #endif

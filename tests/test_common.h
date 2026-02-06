@@ -124,13 +124,6 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir,
                          int problemId, char *usercode, int num_of_test, std::string &global_work_dir,
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled, const int *syscall_template,
-                         const LanguageFactory &language_factory);
-JudgeResult runJudgeTask(int runner_id, int language, char *work_dir,
-                         const std::pair<std::string, int> &infilePair, int ACflg, int SPECIAL_JUDGE,
-                         int solution_id, double timeLimit, double usedtime, int memoryLimit,
-                         int problemId, char *usercode, int num_of_test, std::string &global_work_dir,
-                         const JudgeConfigSnapshot &config, const JudgeEnv &env,
-                         bool record_syscall, bool debug_enabled, const int *syscall_template,
                          const LanguageFactory &language_factory, const CompareFactory &compare_factory);
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode,
                                    int timeLimit, int usedtime, int memoryLimit,
@@ -138,13 +131,6 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    int &ACflg, int SPECIAL_JUDGE, std::string &global_work_dir,
                                    SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled);
-JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode,
-                                   int timeLimit, int usedtime, int memoryLimit,
-                                   std::vector<std::pair<std::string, int>> &inFileList,
-                                   int &ACflg, int SPECIAL_JUDGE, std::string &global_work_dir,
-                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
-                                   const JudgeEnv &env, bool record_syscall, bool debug_enabled,
-                                   const int *syscall_template, const LanguageFactory &language_factory);
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode,
                                    int timeLimit, int usedtime, int memoryLimit,
                                    std::vector<std::pair<std::string, int>> &inFileList,
@@ -402,6 +388,71 @@ inline JudgeConfigSnapshot make_config_snapshot() {
     cfg.java_xmx = java_xmx;
     return cfg;
 }
+
+inline JudgeEnv make_env_with_home(const std::string &home) {
+    std::strcpy(oj_home, home.c_str());
+    return capture_env();
+}
+
+struct RuntimeTestInputs {
+    JudgeConfigSnapshot config;
+    bool record_syscall = false;
+    bool debug_enabled = false;
+};
+
+inline RuntimeTestInputs make_runtime_test_inputs() {
+    RuntimeTestInputs runtime;
+    runtime.config = make_config_snapshot();
+    runtime.record_syscall = (record_call != 0);
+    runtime.debug_enabled = (DEBUG != 0);
+    return runtime;
+}
+
+struct ScopedGlobalRuntimeGuard {
+    int saved_debug = 0;
+    int saved_no_record = 0;
+    JudgeConfigSnapshot saved_config;
+    JudgeRuntimeFlags saved_flags;
+    JudgeEnv saved_env;
+
+    ScopedGlobalRuntimeGuard()
+        : saved_debug(DEBUG), saved_no_record(NO_RECORD),
+          saved_config(capture_config_snapshot()),
+          saved_flags(capture_runtime_flags()),
+          saved_env(capture_env()) {}
+
+    ~ScopedGlobalRuntimeGuard() {
+        DEBUG = saved_debug;
+        NO_RECORD = saved_no_record;
+        std::strcpy(host_name, saved_config.host_name.c_str());
+        std::strcpy(user_name, saved_config.user_name.c_str());
+        std::strcpy(password, saved_config.password.c_str());
+        std::strcpy(db_name, saved_config.db_name.c_str());
+        std::strcpy(http_username, saved_config.http_username.c_str());
+        std::strcpy(java_xms, saved_config.java_xms.c_str());
+        std::strcpy(java_xmx, saved_config.java_xmx.c_str());
+        database_port = saved_config.database_port;
+        javaTimeBonus = saved_config.java_time_bonus;
+        java_memory_bonus = saved_config.java_memory_bonus;
+        sim_enable = saved_config.sim_enable;
+        full_diff = saved_config.full_diff;
+        SHARE_MEMORY_RUN = saved_config.share_memory_run;
+        use_max_time = saved_config.use_max_time;
+        use_ptrace = saved_config.use_ptrace;
+        ALL_TEST_MODE = saved_config.all_test_mode;
+        enable_parallel = saved_config.enable_parallel;
+
+        record_call = saved_flags.record_call;
+        admin = saved_flags.admin;
+        no_sim = saved_flags.no_sim;
+        MYSQL_MODE = saved_flags.mysql_mode;
+        READ_FROM_STDIN = saved_flags.read_from_stdin;
+
+        std::strcpy(oj_home, saved_env.oj_home.c_str());
+        std::strcpy(http_baseurl, saved_env.http_baseurl.c_str());
+        std::strcpy(http_password, saved_env.http_password.c_str());
+    }
+};
 
 template <typename T>
 inline void exercise_seccomp_sandbox(T &lang) {

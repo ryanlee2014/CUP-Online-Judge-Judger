@@ -62,6 +62,63 @@ void log_parallel_budget_decision(const ParallelRunOptions &opts, const Parallel
               "parallel budget workers=%d total=%zu env_workers=%d memory_cap=%d chunk=%zu env_chunk=%d",
               decision.workers, decision.total_files, decision.env_workers, decision.memory_cap, chunk_size, env_chunk);
 }
+
+RunTaskOptions build_run_task_options(int runner_id, int language, char *work_dir,
+                                      const pair<string, int> &infilePair, int ACflg, int SPECIAL_JUDGE,
+                                      int solution_id, double timeLimit, double usedtime, int memoryLimit,
+                                      int problemId, char *usercode, int num_of_test, string &global_work_dir,
+                                      const JudgeConfigSnapshot &config, const JudgeEnv &env,
+                                      bool record_syscall, bool debug_enabled, const int *syscall_template) {
+    RunTaskOptions opts;
+    opts.runner_id = runner_id;
+    opts.language = language;
+    opts.work_dir = work_dir;
+    opts.infile_pair = &infilePair;
+    opts.ACflg = ACflg;
+    opts.special_judge = SPECIAL_JUDGE;
+    opts.solution_id = solution_id;
+    opts.time_limit = timeLimit;
+    opts.used_time = usedtime;
+    opts.memory_limit = memoryLimit;
+    opts.problem_id = problemId;
+    opts.usercode = usercode;
+    opts.case_index = num_of_test;
+    opts.global_work_dir = &global_work_dir;
+    opts.config = &config;
+    opts.env = &env;
+    opts.record_syscall = record_syscall;
+    opts.debug_enabled = debug_enabled;
+    opts.syscall_template = syscall_template;
+    return opts;
+}
+
+ParallelRunOptions build_parallel_run_options(int runner_id, int language, char *work_dir, char *usercode,
+                                              int timeLimit, int usedtime, int memoryLimit,
+                                              vector<pair<string, int>> &inFileList, int &ACflg,
+                                              int SPECIAL_JUDGE, string &global_work_dir,
+                                              SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
+                                              const JudgeEnv &env, bool record_syscall, bool debug_enabled,
+                                              const int *syscall_template) {
+    ParallelRunOptions opts;
+    opts.runner_id = runner_id;
+    opts.language = language;
+    opts.work_dir = work_dir;
+    opts.usercode = usercode;
+    opts.time_limit = timeLimit;
+    opts.used_time = usedtime;
+    opts.memory_limit = memoryLimit;
+    opts.in_file_list = &inFileList;
+    opts.ac_flag = &ACflg;
+    opts.special_judge = SPECIAL_JUDGE;
+    opts.global_work_dir = &global_work_dir;
+    opts.submission = &submissionInfo;
+    opts.config = &config;
+    opts.env = &env;
+    opts.record_syscall = record_syscall;
+    opts.debug_enabled = debug_enabled;
+    opts.syscall_template = syscall_template;
+    return opts;
+}
 }  // namespace
 
 int compute_parallel_budget(const ParallelRunOptions &opts) {
@@ -142,26 +199,10 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled, const int *syscall_template,
                          const LanguageFactory &language_factory, const CompareFactory &compare_factory) {
-    RunTaskOptions opts;
-    opts.runner_id = runner_id;
-    opts.language = language;
-    opts.work_dir = work_dir;
-    opts.infile_pair = &infilePair;
-    opts.ACflg = ACflg;
-    opts.special_judge = SPECIAL_JUDGE;
-    opts.solution_id = solution_id;
-    opts.time_limit = timeLimit;
-    opts.used_time = usedtime;
-    opts.memory_limit = memoryLimit;
-    opts.problem_id = problemId;
-    opts.usercode = usercode;
-    opts.case_index = num_of_test;
-    opts.global_work_dir = &global_work_dir;
-    opts.config = &config;
-    opts.env = &env;
-    opts.record_syscall = record_syscall;
-    opts.debug_enabled = debug_enabled;
-    opts.syscall_template = syscall_template;
+    RunTaskOptions opts = build_run_task_options(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
+                                                 solution_id, timeLimit, usedtime, memoryLimit, problemId, usercode,
+                                                 num_of_test, global_work_dir, config, env, record_syscall,
+                                                 debug_enabled, syscall_template);
     opts.language_factory = language_factory;
     opts.compare_factory = compare_factory;
     return runJudgeTask(opts);
@@ -172,22 +213,11 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
                          int problemId, char *usercode, int num_of_test, string &global_work_dir,
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled, const int *syscall_template) {
-    return runJudgeTask(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
-                        solution_id, timeLimit, usedtime, memoryLimit,
-                        problemId, usercode, num_of_test, global_work_dir, config, env,
-                        record_syscall, debug_enabled, syscall_template, nullptr, nullptr);
-}
-
-JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair<string, int> &infilePair, int ACflg,
-                         int SPECIAL_JUDGE, int solution_id, double timeLimit, double usedtime, int memoryLimit,
-                         int problemId, char *usercode, int num_of_test, string &global_work_dir,
-                         const JudgeConfigSnapshot &config, const JudgeEnv &env,
-                         bool record_syscall, bool debug_enabled, const int *syscall_template,
-                         const LanguageFactory &language_factory) {
-    return runJudgeTask(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
-                        solution_id, timeLimit, usedtime, memoryLimit,
-                        problemId, usercode, num_of_test, global_work_dir, config, env,
-                        record_syscall, debug_enabled, syscall_template, language_factory, nullptr);
+    RunTaskOptions opts = build_run_task_options(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
+                                                 solution_id, timeLimit, usedtime, memoryLimit, problemId, usercode,
+                                                 num_of_test, global_work_dir, config, env, record_syscall,
+                                                 debug_enabled, syscall_template);
+    return runJudgeTask(opts);
 }
 
 JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair<string, int> &infilePair, int ACflg,
@@ -195,10 +225,11 @@ JudgeResult runJudgeTask(int runner_id, int language, char *work_dir, const pair
                          int problemId, char *usercode, int num_of_test, string &global_work_dir,
                          const JudgeConfigSnapshot &config, const JudgeEnv &env,
                          bool record_syscall, bool debug_enabled) {
-    return runJudgeTask(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
-                        solution_id, timeLimit, usedtime, memoryLimit,
-                        problemId, usercode, num_of_test, global_work_dir, config, env,
-                        record_syscall, debug_enabled, nullptr, nullptr, nullptr);
+    RunTaskOptions opts = build_run_task_options(runner_id, language, work_dir, infilePair, ACflg, SPECIAL_JUDGE,
+                                                 solution_id, timeLimit, usedtime, memoryLimit, problemId, usercode,
+                                                 num_of_test, global_work_dir, config, env, record_syscall,
+                                                 debug_enabled, nullptr);
+    return runJudgeTask(opts);
 }
 
 JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
@@ -273,24 +304,10 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled,
                                    const int *syscall_template, const LanguageFactory &language_factory,
                                    const CompareFactory &compare_factory) {
-    ParallelRunOptions opts;
-    opts.runner_id = runner_id;
-    opts.language = language;
-    opts.work_dir = work_dir;
-    opts.usercode = usercode;
-    opts.time_limit = timeLimit;
-    opts.used_time = usedtime;
-    opts.memory_limit = memoryLimit;
-    opts.in_file_list = &inFileList;
-    opts.ac_flag = &ACflg;
-    opts.special_judge = SPECIAL_JUDGE;
-    opts.global_work_dir = &global_work_dir;
-    opts.submission = &submissionInfo;
-    opts.config = &config;
-    opts.env = &env;
-    opts.record_syscall = record_syscall;
-    opts.debug_enabled = debug_enabled;
-    opts.syscall_template = syscall_template;
+    ParallelRunOptions opts = build_parallel_run_options(runner_id, language, work_dir, usercode, timeLimit, usedtime,
+                                                         memoryLimit, inFileList, ACflg, SPECIAL_JUDGE,
+                                                         global_work_dir, submissionInfo, config, env, record_syscall,
+                                                         debug_enabled, syscall_template);
     opts.language_factory = language_factory;
     opts.compare_factory = compare_factory;
     return runParallelJudge(opts);
@@ -302,10 +319,12 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
                                    SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled,
-                                   const int *syscall_template, const LanguageFactory &language_factory) {
-    return runParallelJudge(runner_id, language, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
-                            ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo, config, env,
-                            record_syscall, debug_enabled, syscall_template, language_factory, nullptr);
+                                   const int *syscall_template) {
+    ParallelRunOptions opts = build_parallel_run_options(runner_id, language, work_dir, usercode, timeLimit, usedtime,
+                                                         memoryLimit, inFileList, ACflg, SPECIAL_JUDGE,
+                                                         global_work_dir, submissionInfo, config, env, record_syscall,
+                                                         debug_enabled, syscall_template);
+    return runParallelJudge(opts);
 }
 
 JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
@@ -314,19 +333,9 @@ JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, 
                                    int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
                                    SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
                                    const JudgeEnv &env, bool record_syscall, bool debug_enabled) {
-    return runParallelJudge(runner_id, language, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
-                            ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo, config, env,
-                            record_syscall, debug_enabled, nullptr, nullptr, nullptr);
-}
-
-JudgeSeriesResult runParallelJudge(int runner_id, int language, char *work_dir, char *usercode, int timeLimit,
-                                   int usedtime, int memoryLimit,
-                                   vector<pair<string, int>> &inFileList,
-                                   int &ACflg, int SPECIAL_JUDGE, string &global_work_dir,
-                                   SubmissionInfo &submissionInfo, const JudgeConfigSnapshot &config,
-                                   const JudgeEnv &env, bool record_syscall, bool debug_enabled,
-                                   const int *syscall_template) {
-    return runParallelJudge(runner_id, language, work_dir, usercode, timeLimit, usedtime, memoryLimit, inFileList,
-                            ACflg, SPECIAL_JUDGE, global_work_dir, submissionInfo, config, env,
-                            record_syscall, debug_enabled, syscall_template, nullptr, nullptr);
+    ParallelRunOptions opts = build_parallel_run_options(runner_id, language, work_dir, usercode, timeLimit, usedtime,
+                                                         memoryLimit, inFileList, ACflg, SPECIAL_JUDGE,
+                                                         global_work_dir, submissionInfo, config, env, record_syscall,
+                                                         debug_enabled, nullptr);
+    return runParallelJudge(opts);
 }

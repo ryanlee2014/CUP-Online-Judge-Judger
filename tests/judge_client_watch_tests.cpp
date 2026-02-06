@@ -2,10 +2,10 @@
 
 TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -21,16 +21,15 @@ TEST(JudgeClientWatchSolutionBranches) {
     double tl = 1.0;
     int mem = 1;
     use_ptrace = 0;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
 
     int ac = ACCEPT;
     int top = STD_MB * 2;
     test_hooks::state().wait4_status = 0;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, MEMORY_LIMIT_EXCEEDED);
 
     ac = ACCEPT;
@@ -40,8 +39,8 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_TRUE(ac == ACCEPT || ac == RUNTIME_ERROR);
 
     ac = ACCEPT;
@@ -52,8 +51,8 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
 
     ac = ACCEPT;
@@ -62,8 +61,8 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = (SIGXCPU << 8) | 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_TRUE(ac != ACCEPT);
 
     ac = ACCEPT;
@@ -71,18 +70,18 @@ TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::state().wait4_status = SIGXCPU;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, 64,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_TRUE(ac != ACCEPT);
     std::filesystem::current_path(old_cwd);
 }
 
 TEST(JudgeClientWatchSolutionKilledDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -103,13 +102,12 @@ TEST(JudgeClientWatchSolutionKilledDebug) {
     DEBUG = 1;
     use_ptrace = 0;
     ALL_TEST_MODE = 0;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     DEBUG = 0;
     ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
@@ -117,10 +115,10 @@ TEST(JudgeClientWatchSolutionKilledDebug) {
 
 TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -139,13 +137,12 @@ TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     int top = 0;
     int ac = ACCEPT;
     use_ptrace = 0;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = SIGKILL;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_TRUE(read_file(tmp.path / "error.out").find("Runtime Error:") != std::string::npos);
 
     write_file(tmp.path / "error.out", "");
@@ -154,8 +151,8 @@ TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     test_hooks::state().wait4_status = SIGALRM;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, TIME_LIMIT_EXCEEDED);
 
     write_file(tmp.path / "error.out", "");
@@ -164,8 +161,8 @@ TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     test_hooks::state().wait4_status = SIGXFSZ;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
 
     write_file(tmp.path / "error.out", "");
@@ -174,18 +171,18 @@ TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     test_hooks::state().wait4_status = SIGILL;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, RUNTIME_ERROR);
     std::filesystem::current_path(old_cwd);
 }
 
 TEST(JudgeClientWatchSolutionExitcodeDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -204,13 +201,12 @@ TEST(JudgeClientWatchSolutionExitcodeDebug) {
     int ac = ACCEPT;
     DEBUG = 1;
     use_ptrace = 1;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = (SIGXFSZ << 8) | 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
     DEBUG = 0;
     use_ptrace = 0;
@@ -219,10 +215,10 @@ TEST(JudgeClientWatchSolutionExitcodeDebug) {
 
 TEST(JudgeClientWatchSolutionSignalDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -241,13 +237,12 @@ TEST(JudgeClientWatchSolutionSignalDebug) {
     int ac = ACCEPT;
     DEBUG = 1;
     use_ptrace = 0;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = SIGXFSZ;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
     DEBUG = 0;
     std::filesystem::current_path(old_cwd);
@@ -255,10 +250,10 @@ TEST(JudgeClientWatchSolutionSignalDebug) {
 
 TEST(JudgeClientWatchSolutionMemoryLimitDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -277,13 +272,12 @@ TEST(JudgeClientWatchSolutionMemoryLimitDebug) {
     int ac = ACCEPT;
     DEBUG = 1;
     use_ptrace = 1;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     DEBUG = 0;
     use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
@@ -291,10 +285,10 @@ TEST(JudgeClientWatchSolutionMemoryLimitDebug) {
 
 TEST(JudgeClientWatchSolutionRuntimeErrorBranch) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"c11\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -314,13 +308,12 @@ TEST(JudgeClientWatchSolutionRuntimeErrorBranch) {
     int ac = ACCEPT;
     ALL_TEST_MODE = 0;
     use_ptrace = 1;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, RUNTIME_ERROR);
     use_ptrace = 0;
     ALL_TEST_MODE = 1;
@@ -329,10 +322,10 @@ TEST(JudgeClientWatchSolutionRuntimeErrorBranch) {
 
 TEST(JudgeClientWatchSolutionOutputLimitPtrace) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -350,13 +343,12 @@ TEST(JudgeClientWatchSolutionOutputLimitPtrace) {
     int top = 0;
     int ac = ACCEPT;
     use_ptrace = 1;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
     use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
@@ -364,10 +356,10 @@ TEST(JudgeClientWatchSolutionOutputLimitPtrace) {
 
 TEST(JudgeClientWatchSolutionPtraceBranches) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -391,12 +383,11 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
     test_hooks::state().wait4_statuses.push_back(0x7f);
     test_hooks::state().wait4_statuses.push_back(0);
     int ac = ACCEPT;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(call_counter[12], 1);
 
     std::fill(call_counter, call_counter + call_array_size, 0);
@@ -404,11 +395,11 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
     test_hooks::state().wait4_statuses.push_back(0x7f);
     test_hooks::state().wait4_statuses.push_back(0);
     ac = ACCEPT;
-    record_syscall = record_call != 0;
+    runtime = make_runtime_test_inputs();
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
-                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), make_config_snapshot(),
-                   env, record_syscall, debug_enabled);
+                   used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
+                   env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, RUNTIME_ERROR);
     use_ptrace = 0;
     record_call = 0;
@@ -418,10 +409,10 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
 
 TEST(JudgeClientWatchSolutionWithFileIdDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -444,14 +435,13 @@ TEST(JudgeClientWatchSolutionWithFileIdDebug) {
     DEBUG = 1;
     ALL_TEST_MODE = 0;
     use_ptrace = 0;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().wait4_status = 1;
     watch_solution_with_file_id(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                                 const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                                 used, tl, p_id, pe, const_cast<char *>(root.c_str()), 1,
-                                call_counter_local, make_config_snapshot(), env,
-                                record_syscall, debug_enabled);
+                                call_counter_local, runtime.config, env,
+                                runtime.record_syscall, runtime.debug_enabled);
     DEBUG = 0;
     ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
@@ -459,10 +449,10 @@ TEST(JudgeClientWatchSolutionWithFileIdDebug) {
 
 TEST(JudgeClientWatchSolutionWithFileIdPtraceBranch) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     std::string root = tmp.path.string();
-    std::strcpy(oj_home, root.c_str());
-    JudgeEnv env = capture_env();
+    JudgeEnv env = make_env_with_home(root);
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto old_cwd = std::filesystem::current_path();
     std::filesystem::current_path(tmp.path);
@@ -482,19 +472,24 @@ TEST(JudgeClientWatchSolutionWithFileIdPtraceBranch) {
     int call_counter_local[call_array_size] = {};
     use_ptrace = 1;
     record_call = 1;
-    bool record_syscall = record_call != 0;
-    bool debug_enabled = DEBUG != 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs();
     test_hooks::state().ptrace_syscall = 12;
     test_hooks::state().wait4_statuses.push_back(0x7f);
     test_hooks::state().wait4_statuses.push_back(0);
     watch_solution_with_file_id(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                                 const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                                 used, tl, p_id, pe, const_cast<char *>(root.c_str()), 1,
-                                call_counter_local, make_config_snapshot(), env,
-                                record_syscall, debug_enabled);
+                                call_counter_local, runtime.config, env,
+                                runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(call_counter_local[12], 1);
     use_ptrace = 0;
     record_call = 0;
     std::filesystem::current_path(old_cwd);
 }
+
+
+
+
+
+
 
