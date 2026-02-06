@@ -143,6 +143,11 @@ TEST(JudgeClientParallelBudgetBranches) {
     ParallelRunOptions opts;
     EXPECT_TRUE(compute_parallel_budget(opts) >= 1);
 
+    std::vector<std::pair<std::string, int>> single_file = {{"1.in", 1}};
+    opts.in_file_list = &single_file;
+    opts.memory_limit = 1024;
+    EXPECT_EQ(compute_parallel_budget(opts), 1);
+
     std::vector<std::pair<std::string, int>> files = {{"1.in", 1}, {"2.in", 1}, {"3.in", 1}};
     opts.in_file_list = &files;
     opts.memory_limit = 1024;
