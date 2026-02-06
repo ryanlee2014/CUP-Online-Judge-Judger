@@ -54,12 +54,27 @@ void sync_case_state_back(const CaseExecutionState &execution_state, const Judge
 
 void run_cases_parallel(int runner_id, JudgeContext &ctx, FlowState &state,
                         vector<pair<string, int>> &inFileList, const int *syscall_template_ptr) {
-    auto r = runParallelJudge(runner_id, ctx.lang, state.work_dir, ctx.usercode, ctx.time_limit, state.usedtime,
-                              ctx.memory_limit, inFileList, state.ACflg, ctx.special_judge,
-                              state.global_work_dir,
-                              ctx.submission, ctx.config, ctx.env,
-                              ctx.flags.record_call != 0, ctx.flags.debug != 0, syscall_template_ptr,
-                              ctx.language_factory, ctx.compare_factory);
+    ParallelRunOptions options;
+    options.runner_id = runner_id;
+    options.language = ctx.lang;
+    options.work_dir = state.work_dir;
+    options.usercode = ctx.usercode;
+    options.time_limit = ctx.time_limit;
+    options.used_time = static_cast<int>(state.usedtime);
+    options.memory_limit = ctx.memory_limit;
+    options.in_file_list = &inFileList;
+    options.ac_flag = &state.ACflg;
+    options.special_judge = ctx.special_judge;
+    options.global_work_dir = &state.global_work_dir;
+    options.submission = &ctx.submission;
+    options.config = &ctx.config;
+    options.env = &ctx.env;
+    options.record_syscall = (ctx.flags.record_call != 0);
+    options.debug_enabled = (ctx.flags.debug != 0);
+    options.syscall_template = syscall_template_ptr;
+    options.language_factory = ctx.language_factory;
+    options.compare_factory = ctx.compare_factory;
+    auto r = runParallelJudge(options);
     apply_parallel_result(r, state.num_of_test, ctx.time_limit, ctx.memory_limit, state.finalACflg,
                           state.ACflg, state.topmemory, state.usedtime,
                           state.max_case_time, state.pass_point, state.pass_rate, ctx.sender);

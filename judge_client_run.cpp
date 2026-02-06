@@ -272,16 +272,30 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
             ChunkResult chunk;
             chunk.results.reserve(end - start);
             for (size_t i = start; i < end; ++i) {
-                double usedtime_local = 0;
                 const auto &infilePair = inFileList[i];
-                int local_ac = base_ac;
-                JudgeResult r = runJudgeTask(opts.runner_id, opts.submission->getLanguage(), opts.work_dir, infilePair,
-                                             local_ac, opts.special_judge, opts.submission->getSolutionId(),
-                                             opts.submission->getTimeLimit(), usedtime_local,
-                                             opts.submission->getMemoryLimit(), opts.submission->getProblemId(),
-                                             opts.usercode, int(i), *opts.global_work_dir, *opts.config, *opts.env,
-                                             opts.record_syscall, opts.debug_enabled,
-                                             opts.syscall_template, opts.language_factory, opts.compare_factory);
+                RunTaskOptions task_opts;
+                task_opts.runner_id = opts.runner_id;
+                task_opts.language = opts.submission->getLanguage();
+                task_opts.work_dir = opts.work_dir;
+                task_opts.infile_pair = &infilePair;
+                task_opts.ACflg = base_ac;
+                task_opts.special_judge = opts.special_judge;
+                task_opts.solution_id = opts.submission->getSolutionId();
+                task_opts.time_limit = opts.submission->getTimeLimit();
+                task_opts.used_time = 0;
+                task_opts.memory_limit = opts.submission->getMemoryLimit();
+                task_opts.problem_id = opts.submission->getProblemId();
+                task_opts.usercode = opts.usercode;
+                task_opts.case_index = static_cast<int>(i);
+                task_opts.global_work_dir = opts.global_work_dir;
+                task_opts.config = opts.config;
+                task_opts.env = opts.env;
+                task_opts.record_syscall = opts.record_syscall;
+                task_opts.debug_enabled = opts.debug_enabled;
+                task_opts.syscall_template = opts.syscall_template;
+                task_opts.language_factory = opts.language_factory;
+                task_opts.compare_factory = opts.compare_factory;
+                JudgeResult r = runJudgeTask(task_opts);
                 chunk.results.push_back(r);
             }
             return chunk;

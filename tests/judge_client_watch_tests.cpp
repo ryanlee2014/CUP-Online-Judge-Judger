@@ -20,8 +20,7 @@ TEST(JudgeClientWatchSolutionBranches) {
     double used = 0;
     double tl = 1.0;
     int mem = 1;
-    use_ptrace = 0;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, false, true, false);
 
     int ac = ACCEPT;
     int top = STD_MB * 2;
@@ -99,17 +98,12 @@ TEST(JudgeClientWatchSolutionKilledDebug) {
     int mem = 1024;
     int top = 0;
     int ac = ACCEPT;
-    DEBUG = 1;
-    use_ptrace = 0;
-    ALL_TEST_MODE = 0;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(true, false, false, false);
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
-    DEBUG = 0;
-    ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -136,8 +130,7 @@ TEST(JudgeClientWatchSolutionErrorAndExitStatus) {
     int mem = 64;
     int top = 0;
     int ac = ACCEPT;
-    use_ptrace = 0;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, false, true, false);
     test_hooks::state().wait4_status = SIGKILL;
     watch_solution(1, infile, ac, 1, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
@@ -199,17 +192,13 @@ TEST(JudgeClientWatchSolutionExitcodeDebug) {
     int mem = 64;
     int top = 0;
     int ac = ACCEPT;
-    DEBUG = 1;
-    use_ptrace = 1;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(true, true, true, false);
     test_hooks::state().wait4_status = (SIGXFSZ << 8) | 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
-    DEBUG = 0;
-    use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -235,16 +224,13 @@ TEST(JudgeClientWatchSolutionSignalDebug) {
     int mem = 64;
     int top = 0;
     int ac = ACCEPT;
-    DEBUG = 1;
-    use_ptrace = 0;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(true, false, true, false);
     test_hooks::state().wait4_status = SIGXFSZ;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
-    DEBUG = 0;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -270,16 +256,12 @@ TEST(JudgeClientWatchSolutionMemoryLimitDebug) {
     int mem = 1;
     int top = STD_MB * 2;
     int ac = ACCEPT;
-    DEBUG = 1;
-    use_ptrace = 1;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(true, true, true, false);
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
-    DEBUG = 0;
-    use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -306,17 +288,13 @@ TEST(JudgeClientWatchSolutionRuntimeErrorBranch) {
     int mem = 64;
     int top = 0;
     int ac = ACCEPT;
-    ALL_TEST_MODE = 0;
-    use_ptrace = 1;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, false, false);
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, RUNTIME_ERROR);
-    use_ptrace = 0;
-    ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -342,15 +320,13 @@ TEST(JudgeClientWatchSolutionOutputLimitPtrace) {
     int mem = 64;
     int top = 0;
     int ac = ACCEPT;
-    use_ptrace = 1;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, true, false);
     test_hooks::state().wait4_status = 1;
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
-    use_ptrace = 0;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -376,14 +352,12 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
     double tl = 1.0;
     int mem = 64;
     int top = 0;
-    use_ptrace = 1;
     test_hooks::state().ptrace_syscall = 12;
     std::fill(call_counter, call_counter + call_array_size, 0);
-    record_call = 1;
     test_hooks::state().wait4_statuses.push_back(0x7f);
     test_hooks::state().wait4_statuses.push_back(0);
     int ac = ACCEPT;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, true, true);
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
@@ -391,18 +365,15 @@ TEST(JudgeClientWatchSolutionPtraceBranches) {
     EXPECT_EQ(call_counter[12], 1);
 
     std::fill(call_counter, call_counter + call_array_size, 0);
-    record_call = 0;
     test_hooks::state().wait4_statuses.push_back(0x7f);
     test_hooks::state().wait4_statuses.push_back(0);
     ac = ACCEPT;
-    runtime = make_runtime_test_inputs();
+    runtime = make_runtime_test_inputs(false, true, true, false);
     watch_solution(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                    const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                    used, tl, p_id, pe, const_cast<char *>(root.c_str()), runtime.config,
                    env, runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(ac, RUNTIME_ERROR);
-    use_ptrace = 0;
-    record_call = 0;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -432,18 +403,13 @@ TEST(JudgeClientWatchSolutionWithFileIdDebug) {
     int top = 0;
     int ac = ACCEPT;
     int call_counter_local[call_array_size] = {};
-    DEBUG = 1;
-    ALL_TEST_MODE = 0;
-    use_ptrace = 0;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(true, false, false, false);
     test_hooks::state().wait4_status = 1;
     watch_solution_with_file_id(1, infile, ac, 0, const_cast<char *>(user_path.c_str()),
                                 const_cast<char *>(out_path.c_str()), 1, lang, top, mem,
                                 used, tl, p_id, pe, const_cast<char *>(root.c_str()), 1,
                                 call_counter_local, runtime.config, env,
                                 runtime.record_syscall, runtime.debug_enabled);
-    DEBUG = 0;
-    ALL_TEST_MODE = 1;
     std::filesystem::current_path(old_cwd);
 }
 
@@ -470,9 +436,7 @@ TEST(JudgeClientWatchSolutionWithFileIdPtraceBranch) {
     int top = 0;
     int ac = ACCEPT;
     int call_counter_local[call_array_size] = {};
-    use_ptrace = 1;
-    record_call = 1;
-    RuntimeTestInputs runtime = make_runtime_test_inputs();
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, true, true);
     test_hooks::state().ptrace_syscall = 12;
     test_hooks::state().wait4_statuses.push_back(0x7f);
     test_hooks::state().wait4_statuses.push_back(0);
@@ -482,8 +446,6 @@ TEST(JudgeClientWatchSolutionWithFileIdPtraceBranch) {
                                 call_counter_local, runtime.config, env,
                                 runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(call_counter_local[12], 1);
-    use_ptrace = 0;
-    record_call = 0;
     std::filesystem::current_path(old_cwd);
 }
 

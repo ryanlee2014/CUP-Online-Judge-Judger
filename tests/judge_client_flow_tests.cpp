@@ -57,6 +57,7 @@ TEST(RealProjectFlow) {
 
 TEST(WSJudgedDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard_after_reset;
     const char *argv[] = {"wsjudged", "1", "2", "/tmp", "DEBUG"};
     EXPECT_EQ(wsjudged_main(5, argv), 0);
     EXPECT_EQ(test_hooks::state().last_exec_path, "/usr/bin/judge_client");
@@ -174,57 +175,60 @@ TEST(JudgeClientPrintCallArray) {
 
 TEST(JudgeClientCompileDebug) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     write_basic_config(tmp.path, false, false);
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto work_dir = tmp.path / "run1";
     std::filesystem::create_directories(work_dir);
     auto work_str = work_dir.string();
-    DEBUG = 1;
     test_hooks::state().fork_results.push_back(0);
     JudgeEnv env = capture_env();
-    JudgeConfigSnapshot cfg = make_config_snapshot();
-    expect_exit([&]() { compile(0, work_str.data(), env, cfg, DEBUG != 0); }, 0);
+    RuntimeTestInputs runtime = make_runtime_test_inputs(true, true, true, false);
+    expect_exit([&]() { compile(0, work_str.data(), env, runtime.config, runtime.debug_enabled); }, 0);
 
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard_after_reset;
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     test_hooks::state().compile_result = 0;
     test_hooks::state().fork_results.push_back(123);
     env = capture_env();
-    cfg = make_config_snapshot();
-    EXPECT_EQ(compile(0, work_str.data(), env, cfg, DEBUG != 0), 0);
-    DEBUG = 0;
+    runtime = make_runtime_test_inputs(false, true, true, false);
+    EXPECT_EQ(compile(0, work_str.data(), env, runtime.config, runtime.debug_enabled), 0);
 }
 
 TEST(JudgeClientCompileChildParent) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     write_basic_config(tmp.path, false, false);
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     auto work_dir = tmp.path / "run1";
     std::filesystem::create_directories(work_dir);
     auto work_str = work_dir.string();
     test_hooks::state().fork_results.push_back(0);
     JudgeEnv env = capture_env();
-    JudgeConfigSnapshot cfg = make_config_snapshot();
-    expect_exit([&]() { compile(0, work_str.data(), env, cfg, DEBUG != 0); }, 0);
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, true, false);
+    expect_exit([&]() { compile(0, work_str.data(), env, runtime.config, runtime.debug_enabled); }, 0);
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard_after_reset;
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     test_hooks::state().compile_result = 0;
     env = capture_env();
-    cfg = make_config_snapshot();
-    EXPECT_EQ(compile(0, work_str.data(), env, cfg, DEBUG != 0), 0);
+    runtime = make_runtime_test_inputs(false, true, true, false);
+    EXPECT_EQ(compile(0, work_str.data(), env, runtime.config, runtime.debug_enabled), 0);
 }
 
 TEST(JudgeClientRunSolutionPaths) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     auto old_cwd = std::filesystem::current_path();
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     write_file(tmp.path / "data.in", "1");
     write_file(tmp.path / "data1.in", "1");
@@ -232,12 +236,11 @@ TEST(JudgeClientRunSolutionPaths) {
     double tl = 1.0;
     double used = 0.0;
     int mem = 64;
-    ALL_TEST_MODE = 1;
-    use_ptrace = 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, false, true, false);
     auto work = tmp.path.string();
     int stdout_fd = dup(fileno(stdout));
     int stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, make_config_snapshot()); }, 0);
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, runtime.config); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -249,11 +252,10 @@ TEST(JudgeClientRunSolutionPaths) {
         dup2(stderr_fd, fileno(stderr));
         close(stderr_fd);
     }
-    ALL_TEST_MODE = 0;
-    use_ptrace = 1;
+    runtime = make_runtime_test_inputs(false, true, false, false);
     stdout_fd = dup(fileno(stdout));
     stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution_parallel(lang, work.data(), tl, used, mem, 1, make_config_snapshot()); }, 0);
+    expect_exit([&]() { run_solution_parallel(lang, work.data(), tl, used, mem, 1, runtime.config); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -265,27 +267,25 @@ TEST(JudgeClientRunSolutionPaths) {
         dup2(stderr_fd, fileno(stderr));
         close(stderr_fd);
     }
-    ALL_TEST_MODE = 1;
-    use_ptrace = 1;
 }
 
 TEST(JudgeClientRunSolutionNonAllTest) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     auto old_cwd = std::filesystem::current_path();
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     write_file(tmp.path / "data.in", "1");
     int lang = 0;
     double tl = 1.0;
     double used = 500.0;
     int mem = 64;
-    ALL_TEST_MODE = 0;
-    use_ptrace = 0;
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, false, false, false);
     auto work = tmp.path.string();
     int stdout_fd = dup(fileno(stdout));
     int stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, make_config_snapshot()); }, 0);
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, runtime.config); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -297,26 +297,25 @@ TEST(JudgeClientRunSolutionNonAllTest) {
         dup2(stderr_fd, fileno(stderr));
         close(stderr_fd);
     }
-    ALL_TEST_MODE = 1;
 }
 
 TEST(JudgeClientRunSolutionPtrace) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     TempDir tmp;
     auto old_cwd = std::filesystem::current_path();
-    std::strcpy(oj_home, tmp.path.string().c_str());
+    (void)make_env_with_home(tmp.path.string());
     languageNameReader.loadJSON("{\"0\":\"fake\"}");
     write_file(tmp.path / "data.in", "1");
     int lang = 0;
     double tl = 1.0;
     double used = 0.0;
     int mem = 64;
-    ALL_TEST_MODE = 1;
-    use_ptrace = 1;
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, true, false);
     auto work = tmp.path.string();
     int stdout_fd = dup(fileno(stdout));
     int stderr_fd = dup(fileno(stderr));
-    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, make_config_snapshot()); }, 0);
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, runtime.config); }, 0);
     std::filesystem::current_path(old_cwd);
     if (stdout_fd >= 0) {
         fflush(stdout);
@@ -328,12 +327,12 @@ TEST(JudgeClientRunSolutionPtrace) {
         dup2(stderr_fd, fileno(stderr));
         close(stderr_fd);
     }
-    use_ptrace = 0;
 }
 
 
 TEST(WSJudgedBasics) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     const char *argv1[] = {"wsjudged"};
     EXPECT_EQ(wsjudged_main(1, argv1), 1);
     const char *argv2[] = {"wsjudged", "1", "2", "/tmp"};
@@ -342,7 +341,10 @@ TEST(WSJudgedBasics) {
 
 TEST(WSJudgedDebugArg) {
     test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
     const char *argv[] = {"wsjudged", "1", "2", "/tmp", "debug"};
     EXPECT_EQ(wsjudged_main(5, argv), 0);
     EXPECT_EQ(test_hooks::state().last_exec_path, "/usr/bin/judge_client");
 }
+
+

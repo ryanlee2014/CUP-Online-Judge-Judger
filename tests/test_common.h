@@ -408,6 +408,15 @@ inline RuntimeTestInputs make_runtime_test_inputs() {
     return runtime;
 }
 
+inline RuntimeTestInputs make_runtime_test_inputs(bool debug_enabled, bool use_ptrace_enabled,
+                                                  bool all_test_mode_enabled, bool record_syscall_enabled) {
+    DEBUG = debug_enabled ? 1 : 0;
+    use_ptrace = use_ptrace_enabled ? 1 : 0;
+    ALL_TEST_MODE = all_test_mode_enabled ? 1 : 0;
+    record_call = record_syscall_enabled ? 1 : 0;
+    return make_runtime_test_inputs();
+}
+
 struct ScopedGlobalRuntimeGuard {
     int saved_debug = 0;
     int saved_no_record = 0;
