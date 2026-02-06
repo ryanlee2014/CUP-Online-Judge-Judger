@@ -7,5 +7,6 @@
 void apply_bootstrap_runtime_to_context(JudgeContext &ctx,
                                         const judge_util_helpers::InitRuntimeConfig &runtime);
 void apply_bootstrap_globals_from_runtime(const judge_util_helpers::InitRuntimeConfig &runtime);
+judge_util_helpers::InitRuntimeConfig capture_bootstrap_runtime_from_globals();
 
 #endif

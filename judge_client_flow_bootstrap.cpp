@@ -3,7 +3,6 @@
 #include <string>
 
 #include "judge_client_compile.h"
-#include "judge_client_context_helpers.h"
 #include "judge_client_flow_prep_helpers.h"
 #include "judge_client_flow_socket_helpers.h"
 #include "judge_client_report.h"
@@ -19,17 +18,7 @@ void init_runtime_flags(int argc, char **argv, JudgeContext &ctx, int &solution_
     solution_id = DEFAULT_SOLUTION_ID;
     init_parameters(argc, argv, solution_id, runner_id, judgerId);
     ctx.judger_id = judgerId;
-    JudgeRuntimeFlags legacy_flags = capture_runtime_flags();
-    JudgeEnv legacy_env = capture_env();
-    judge_util_helpers::InitRuntimeConfig runtime;
-    runtime.debug = legacy_flags.debug;
-    runtime.record_call = legacy_flags.record_call;
-    runtime.admin = legacy_flags.admin;
-    runtime.no_sim = legacy_flags.no_sim;
-    runtime.disable_mysql = !legacy_flags.mysql_mode;
-    runtime.read_from_stdin = legacy_flags.read_from_stdin;
-    runtime.has_dir = true;
-    runtime.dir = legacy_env.oj_home;
+    judge_util_helpers::InitRuntimeConfig runtime = capture_bootstrap_runtime_from_globals();
     runtime.has_runner_id = true;
     runtime.runner_id = runner_id;
     apply_bootstrap_runtime_to_context(ctx, runtime);

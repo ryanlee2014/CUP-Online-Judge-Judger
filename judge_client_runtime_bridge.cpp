@@ -53,3 +53,18 @@ void apply_bootstrap_globals_from_runtime(const judge_util_helpers::InitRuntimeC
         judger_number = runtime.runner_id;
     }
 }
+
+judge_util_helpers::InitRuntimeConfig capture_bootstrap_runtime_from_globals() {
+    judge_util_helpers::InitRuntimeConfig runtime;
+    runtime.debug = (DEBUG != 0);
+    runtime.record_call = (record_call != 0);
+    runtime.admin = admin;
+    runtime.no_sim = no_sim;
+    runtime.disable_mysql = !MYSQL_MODE;
+    runtime.read_from_stdin = READ_FROM_STDIN;
+    runtime.has_dir = true;
+    runtime.dir = oj_home;
+    runtime.has_runner_id = true;
+    runtime.runner_id = judger_number;
+    return runtime;
+}
