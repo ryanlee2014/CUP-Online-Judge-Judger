@@ -2,7 +2,6 @@
 
 #include <filesystem>
 
-#include "header/static_var.h"
 #include "library/judge_lib.h"
 
 using namespace std;

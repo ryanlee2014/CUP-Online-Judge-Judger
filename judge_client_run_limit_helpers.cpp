@@ -3,7 +3,6 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include "header/static_var.h"
 #include "model/judge/language/Language.h"
 
 namespace judge_run_helpers {

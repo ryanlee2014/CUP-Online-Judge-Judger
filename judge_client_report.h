@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "header/static_var.h"
 #include "judge_client_adapter.h"
 #include "judge_client_case_executor.h"
 #include "judge_client_context.h"

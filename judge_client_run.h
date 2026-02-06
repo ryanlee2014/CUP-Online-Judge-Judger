@@ -4,7 +4,6 @@
 #include <utility>
 #include <vector>
 
-#include "header/static_var.h"
 #include "judge_client_context.h"
 #include "model/submission/SubmissionInfo.h"
 

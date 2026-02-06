@@ -6,7 +6,6 @@
 #include <string>
 #include <sys/types.h>
 
-#include "header/static_var.h"
 #include "judge_client_context.h"
 #include "judge_client_process_utils.h"
 #include "judge_client_run_helpers.h"

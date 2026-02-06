@@ -9,7 +9,6 @@
 #include "judge_client_context.h"
 #include "judge_client_run_path_helpers.h"
 #include "judge_client_run_series_helpers.h"
-#include "header/static_var.h"
 
 class Language;
 

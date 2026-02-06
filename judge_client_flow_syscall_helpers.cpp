@@ -1,6 +1,6 @@
 #include "judge_client_flow_syscall_helpers.h"
 
-#include "header/static_var.h"
+#include "judge_client_context.h"
 #include "manager/syscall/InitManager.h"
 
 void prepare_syscall_template(const JudgeContext &ctx, std::vector<int> &syscall_template,

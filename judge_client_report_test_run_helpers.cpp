@@ -4,7 +4,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "header/static_var.h"
+#include "judge_client_context.h"
 #include "library/judge_lib.h"
 
 using namespace std;

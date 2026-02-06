@@ -3,7 +3,6 @@
 #include <functional>
 #include <string>
 
-#include "header/static_var.h"
 #include "judge_client_context.h"
 
 using ResultSender = std::function<void(const std::string &)>;

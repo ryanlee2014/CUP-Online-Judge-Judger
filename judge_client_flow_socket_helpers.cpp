@@ -1,6 +1,6 @@
 #include "judge_client_flow_socket_helpers.h"
 
-#include "header/static_var.h"
+#include "judge_client_context.h"
 #include "library/judge_lib.h"
 
 void init_websocket_and_bundle(const std::string &judger_id) {

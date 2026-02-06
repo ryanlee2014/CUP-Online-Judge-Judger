@@ -4,7 +4,6 @@
 #include <memory>
 
 #include "external/compare/Compare.h"
-#include "header/static_var.h"
 #include "judge_client_context.h"
 #include "library/judge_lib.h"
 #include "model/judge/language/Language.h"

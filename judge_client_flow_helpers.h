@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 
-#include "header/static_var.h"
 #include "judge_client_context.h"
 
 struct FlowState {

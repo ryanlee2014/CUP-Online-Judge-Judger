@@ -11,7 +11,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "header/static_var.h"
 #include "library/judge_lib.h"
 #include "model/judge/language/Language.h"
 

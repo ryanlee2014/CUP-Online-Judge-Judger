@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <string>
 
-#include "header/static_var.h"
 #include "judge_client_process_utils.h"
 #include "judge_client_report_bundle_helpers.h"
 #include "judge_client_report_helpers.h"
