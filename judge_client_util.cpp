@@ -8,6 +8,7 @@
 #ifdef UNIT_TEST
 #include "tests/test_hooks.h"
 #endif
+#include "judge_client_runtime_bridge.h"
 #include "judge_client_util_helpers.h"
 #include "library/judge_lib.h"
 
@@ -41,12 +42,12 @@ void init_parameters(int argc, char **argv, int &solution_id,
     if (judge_util_helpers::parse_new_args(argc, argv, parsed)) {
         judge_util_helpers::InitRuntimeConfig runtime = judge_util_helpers::build_runtime_from_parsed(parsed);
         judge_util_helpers::apply_runtime_to_outputs(runtime, solution_id, runner_id, judgerId);
-        judge_util_helpers::apply_runtime_to_globals(runtime);
+        apply_bootstrap_globals_from_runtime(runtime);
         return;
     }
     judge_util_helpers::InitRuntimeConfig runtime = judge_util_helpers::build_runtime_from_legacy(argc, argv);
     judge_util_helpers::apply_runtime_to_outputs(runtime, solution_id, runner_id, judgerId);
-    judge_util_helpers::apply_runtime_to_globals(runtime);
+    apply_bootstrap_globals_from_runtime(runtime);
 }
 
 void print_call_array() {

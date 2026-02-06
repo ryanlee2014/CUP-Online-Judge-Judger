@@ -36,6 +36,10 @@ ParallelBudgetDecision decide_parallel_budget(const ParallelRunOptions &opts) {
         decision.workers = 1;
         return decision;
     }
+    if (decision.total_files == 1) {
+        decision.workers = 1;
+        return decision;
+    }
     decision.env_workers = read_env_int("JUDGE_PARALLEL_WORKERS");
     if (decision.env_workers > 0) {
         decision.workers = decision.env_workers;

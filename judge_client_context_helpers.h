@@ -5,7 +5,6 @@
 #include "judge_client_context.h"
 
 void apply_mysql_config(const MysqlConfigValues &cfg, JudgeContext &ctx);
-void apply_bootstrap_legacy_state(JudgeContext &ctx);
 JudgeConfigSnapshot capture_config_snapshot();
 JudgeRuntimeFlags capture_runtime_flags();
 JudgeEnv capture_env();

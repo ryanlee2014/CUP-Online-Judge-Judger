@@ -43,22 +43,6 @@ void apply_mysql_config(const MysqlConfigValues &cfg, JudgeContext &ctx) {
     ctx.flags.enable_parallel = cfg.enable_parallel;
 }
 
-void apply_bootstrap_legacy_state(JudgeContext &ctx) {
-    // Compatibility bridge: only used during startup to seed context from legacy globals.
-    // Runtime business logic must read from ctx, not from global static_var fields.
-    JudgeEnv legacy_env = capture_env();
-    JudgeRuntimeFlags legacy_flags = capture_runtime_flags();
-    ctx.env.oj_home = legacy_env.oj_home;
-    ctx.env.http_baseurl = legacy_env.http_baseurl;
-    ctx.env.http_password = legacy_env.http_password;
-    ctx.flags.debug = legacy_flags.debug;
-    ctx.flags.record_call = legacy_flags.record_call;
-    ctx.flags.admin = legacy_flags.admin;
-    ctx.flags.no_sim = legacy_flags.no_sim;
-    ctx.flags.mysql_mode = legacy_flags.mysql_mode;
-    ctx.flags.read_from_stdin = legacy_flags.read_from_stdin;
-}
-
 JudgeConfigSnapshot capture_config_snapshot() {
     JudgeConfigSnapshot snapshot;
     snapshot.host_name = host_name;

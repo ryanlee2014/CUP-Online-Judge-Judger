@@ -125,39 +125,4 @@ void apply_runtime_to_outputs(const InitRuntimeConfig &runtime, int &solution_id
     }
 }
 
-void apply_runtime_to_globals(const InitRuntimeConfig &runtime) {
-    // Legacy compatibility only: bootstrap writes CLI parse results into static globals.
-    // Subsequent execution should rely on JudgeContext snapshots, not these globals.
-    if (runtime.debug) {
-        DEBUG = true;
-    }
-    if (runtime.no_record) {
-        NO_RECORD = 1;
-    }
-    if (runtime.record_call) {
-        record_call = 1;
-    }
-    if (runtime.admin) {
-        admin = true;
-    }
-    if (runtime.no_sim) {
-        no_sim = true;
-    }
-    if (runtime.disable_mysql) {
-        MYSQL_MODE = false;
-    }
-    if (runtime.read_from_stdin) {
-        READ_FROM_STDIN = true;
-    }
-    if (runtime.has_lang_name) {
-        strcpy(LANG_NAME, runtime.lang_name.c_str());
-    }
-    if (runtime.has_dir) {
-        strcpy(oj_home, runtime.dir.c_str());
-    }
-    if (runtime.has_runner_id) {
-        judger_number = runtime.runner_id;
-    }
-}
-
 }  // namespace judge_util_helpers

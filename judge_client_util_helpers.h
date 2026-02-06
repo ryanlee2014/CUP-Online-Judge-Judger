@@ -50,7 +50,6 @@ InitRuntimeConfig build_runtime_from_parsed(const ParsedArgs &parsed);
 InitRuntimeConfig build_runtime_from_legacy(int argc, char **argv);
 void apply_runtime_to_outputs(const InitRuntimeConfig &runtime,
                               int &solution_id, int &runner_id, std::string &judgerId);
-void apply_runtime_to_globals(const InitRuntimeConfig &runtime);
 
 }  // namespace judge_util_helpers
 

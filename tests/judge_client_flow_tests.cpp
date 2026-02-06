@@ -64,6 +64,7 @@ TEST(WSJudgedDebug) {
 }
 
 TEST(JudgeClientInitParameters) {
+    ScopedGlobalRuntimeGuard runtime_guard;
     int sid = 0;
     int rid = 0;
     std::string jid;
@@ -107,16 +108,10 @@ TEST(JudgeClientInitParameters) {
     EXPECT_EQ(sid, 1);
     EXPECT_EQ(rid, 2);
     EXPECT_TRUE(NO_RECORD);
-    DEBUG = 0;
-    NO_RECORD = 0;
-    record_call = 0;
-    admin = false;
-    no_sim = false;
-    MYSQL_MODE = true;
-    READ_FROM_STDIN = false;
 }
 
 TEST(JudgeClientInitParametersOldPathRecordCall) {
+    ScopedGlobalRuntimeGuard runtime_guard;
     int sid = 0;
     int rid = 0;
     std::string jid;
@@ -130,12 +125,10 @@ TEST(JudgeClientInitParametersOldPathRecordCall) {
     EXPECT_TRUE(record_call);
     EXPECT_EQ(std::string(oj_home), root);
     EXPECT_EQ(std::string(LANG_NAME), "cpp");
-    record_call = 0;
     const char *argv2[] = {"judge_client", "1", "2"};
     int argc2 = sizeof(argv2) / sizeof(argv2[0]);
     init_parameters(argc2, const_cast<char **>(argv2), sid, rid, jid);
     EXPECT_EQ(std::string(oj_home), "/home/judge");
-    DEBUG = 0;
 }
 
 TEST(JudgeClientPrintCallArray) {
