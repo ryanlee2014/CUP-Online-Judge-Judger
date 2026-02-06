@@ -84,7 +84,7 @@ void watch_solution_common(pid_t pidApp, char *infile, int isspj,
             break;
         }
     }
-    add_usedtime(state.usedtime, context.ruse);
+    add_watch_usedtime(state.usedtime, context.ruse);
 }
 
 }  // namespace judge_watch_helpers

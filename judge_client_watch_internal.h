@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "judge_client_watch_helpers.h"
+#include "judge_client_watch_metrics.h"
 
 class Language;
 
@@ -22,10 +23,6 @@ bool handle_signal_status(int status, int &ACflg, bool debug_enabled, const char
 void handle_ptrace_syscall(pid_t pidApp, int &ACflg, int solution_id, int *call_counter_local,
                            bool record_syscall, const JudgeConfigSnapshot &config,
                            const JudgeEnv &env, const char *work_dir);
-bool update_memory_and_check(std::shared_ptr<Language> &languageModel, const struct rusage &ruse, pid_t pidApp,
-                             int mem_lmt, int &topmemory, int &ACflg,
-                             bool debug_enabled, const JudgeConfigSnapshot &config);
-void add_usedtime(double &usedtime, const struct rusage &ruse);
 
 WatchAction watch_phase_wait(WatchContext &ctx);
 WatchAction watch_phase_resource(WatchContext &ctx);

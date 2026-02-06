@@ -33,6 +33,41 @@ std::string read_file_tail(const char *path, long file_size, long max_bytes) {
     data.resize(static_cast<size_t>(file.gcount()));
     return data;
 }
+
+std::string read_runtime_error_tail_if_changed(const char *errorFile, long error_size, long &last_error_size) {
+    if (error_size <= 0 || error_size == last_error_size) {
+        return "";
+    }
+    std::string contents = read_file_tail(errorFile, error_size, 4096);
+    last_error_size = error_size;
+    return contents;
+}
+
+bool classify_runtime_error(const std::string &contents) {
+    return contents.find("Killed") != std::string::npos;
+}
+
+bool apply_runtime_error_action(bool is_killed_error, const std::string &contents, int &ACflg, pid_t pidApp,
+                                bool has_error, bool debug_enabled, const JudgeConfigSnapshot &config,
+                                const JudgeEnv &env, const char *work_dir, std::shared_ptr<Language> &languageModel) {
+    if (is_killed_error) {
+        write_log(env.oj_home.c_str(), contents.c_str());
+        print_runtimeerror(contents.c_str(), work_dir);
+        return true;
+    }
+    if (languageModel->gotErrorWhileRunning(has_error) && !config.all_test_mode) {
+        ACflg = RUNTIME_ERROR;
+        if (config.use_ptrace) {
+            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
+        }
+        return true;
+    }
+    if (debug_enabled && !contents.empty()) {
+        cerr << "Catch error:" << endl;
+        cerr << contents << endl;
+    }
+    return false;
+}
 }  // namespace
 
 #ifdef __i386
@@ -45,28 +80,13 @@ bool handle_error_conditions(shared_ptr<Language> &languageModel, const char *er
                              int solution_id, pid_t pidApp, long &last_error_size,
                              bool debug_enabled, const JudgeConfigSnapshot &config,
                              const JudgeEnv &env, const char *work_dir) {
+    (void)solution_id;
     long error_size = get_file_size(errorFile);
     bool has_error = error_size > 0;
-    if (has_error && error_size != last_error_size) {
-        // Read only the tail to keep per-iteration I/O bounded for large runtime errors.
-        string contents = read_file_tail(errorFile, error_size, 4096);
-        if (debug_enabled) {
-            cerr << "Catch error:" << endl;
-            cerr << contents << endl;
-        }
-        if (contents.find("Killed") != std::string::npos) {
-            write_log(env.oj_home.c_str(), contents.c_str());
-            print_runtimeerror(contents.c_str(), work_dir);
-            last_error_size = error_size;
-            return true;
-        }
-        last_error_size = error_size;
-    }
-    if (languageModel->gotErrorWhileRunning(has_error) && !config.all_test_mode) {
-        ACflg = RUNTIME_ERROR;
-        if (config.use_ptrace) {
-            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-        }
+    std::string contents = read_runtime_error_tail_if_changed(errorFile, error_size, last_error_size);
+    bool killed_error = classify_runtime_error(contents);
+    if (apply_runtime_error_action(killed_error, contents, ACflg, pidApp, has_error,
+                                   debug_enabled, config, env, work_dir, languageModel)) {
         return true;
     }
     return false;
@@ -155,31 +175,6 @@ void handle_ptrace_syscall(pid_t pidApp, int &ACflg, int solution_id, int *call_
         }
         ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
     }
-}
-
-bool update_memory_and_check(shared_ptr<Language> &languageModel, const struct rusage &ruse, pid_t pidApp,
-                             int mem_lmt, int &topmemory, int &ACflg,
-                             bool debug_enabled, const JudgeConfigSnapshot &config) {
-    int tempmemory = languageModel->getMemory(ruse, pidApp);
-    topmemory = max(tempmemory, topmemory);
-    if (topmemory > mem_lmt * STD_MB) {
-        if (debug_enabled) {
-            printf("out of memory %d\n", topmemory);
-        }
-        if (ACflg == ACCEPT) {
-            ACflg = MEMORY_LIMIT_EXCEEDED;
-        }
-        if (config.use_ptrace) {
-            ptrace(PTRACE_KILL, pidApp, NULL, NULL);
-        }
-        return true;
-    }
-    return false;
-}
-
-void add_usedtime(double &usedtime, const struct rusage &ruse) {
-    usedtime += (ruse.ru_utime.tv_sec * 1000 + ruse.ru_utime.tv_usec / 1000);
-    usedtime += (ruse.ru_stime.tv_sec * 1000 + ruse.ru_stime.tv_usec / 1000);
 }
 
 }  // namespace judge_watch_helpers

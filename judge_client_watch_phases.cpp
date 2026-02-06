@@ -10,8 +10,17 @@ WatchAction watch_phase_wait(WatchContext &ctx) {
 }
 
 WatchAction watch_phase_resource(WatchContext &ctx) {
-    if (update_memory_and_check(ctx.languageModel, ctx.ruse, ctx.pidApp, ctx.mem_lmt, ctx.state->topmemory,
-                                ctx.state->ACflg, ctx.options->debug_enabled, *ctx.options->config)) {
+    WatchMetricsInput metrics;
+    metrics.languageModel = ctx.languageModel;
+    metrics.ruse = &ctx.ruse;
+    metrics.pidApp = ctx.pidApp;
+    metrics.mem_lmt = ctx.mem_lmt;
+    metrics.topmemory = &ctx.state->topmemory;
+    metrics.ACflg = &ctx.state->ACflg;
+    metrics.debug_enabled = ctx.options->debug_enabled;
+    metrics.config = ctx.options->config;
+    update_watch_metrics(metrics);
+    if (metrics.stop) {
         return WatchAction::Stop;
     }
     if (WIFEXITED(ctx.status)) {
