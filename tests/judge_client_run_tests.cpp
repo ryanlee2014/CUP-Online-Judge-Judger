@@ -112,6 +112,47 @@ TEST(JudgeClientRunJudgeTaskTimeLimitClamp) {
     EXPECT_EQ(static_cast<int>(res.usedTime), 1000);
 }
 
+TEST(JudgeClientRunOverloadCoverage) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeEnv env = make_env_with_home(root);
+    languageNameReader.loadJSON("{\"0\":\"fake\"}");
+    std::filesystem::create_directories(tmp.path / "data" / "1");
+    write_file(tmp.path / "data" / "1" / "1.in", "");
+    write_file(tmp.path / "data" / "1" / "1.out", "");
+    write_file(tmp.path / "error0.out", "");
+    std::string work = tmp.path.string();
+    std::string global = work + "/";
+    std::pair<std::string, int> infilePair("1.in", 1);
+    char usercode[16] = "code";
+    int ac = ACCEPT;
+    bool record_syscall = false;
+    bool debug_enabled = false;
+    int syscall_template[call_array_size] = {};
+    test_hooks::state().compare_result = ACCEPT;
+    test_hooks::state().wait4_status = 0;
+
+    auto language_factory = [](int lang) { return std::shared_ptr<Language>(getLanguageModel(lang)); };
+    auto compare_factory = []() { return std::shared_ptr<Compare::Compare>(getCompareModel()); };
+
+    JudgeResult res = runJudgeTask(1, 0, work.data(), infilePair, ac, 0, 1, 1.0,
+                                   0.0, 64, 1, usercode, 0, global, make_config_snapshot(),
+                                   env, record_syscall, debug_enabled, syscall_template,
+                                   language_factory, compare_factory);
+    EXPECT_EQ(res.ACflg, ACCEPT);
+
+    SubmissionInfo submission;
+    submission.setLanguage(0).setSolutionId(1).setTimeLimit(1).setMemoryLimit(64).setProblemId(1);
+    std::vector<std::pair<std::string, int>> inFileList = {{"1.in", 1}};
+    auto series = runParallelJudge(1, 0, work.data(), const_cast<char *>("code"), 1, 0, 64,
+                                   inFileList, ac, 0, global, submission, make_config_snapshot(),
+                                   env, record_syscall, debug_enabled, syscall_template,
+                                   language_factory, compare_factory);
+    EXPECT_TRUE(series.pass_point >= 0);
+}
+
 TEST(JudgeClientRunParallelJudge) {
     test_hooks::reset();
     ScopedGlobalRuntimeGuard runtime_guard;
@@ -142,6 +183,10 @@ TEST(JudgeClientRunParallelJudge) {
 TEST(JudgeClientParallelBudgetBranches) {
     ParallelRunOptions opts;
     EXPECT_TRUE(compute_parallel_budget(opts) >= 1);
+
+    std::vector<std::pair<std::string, int>> empty_files;
+    opts.in_file_list = &empty_files;
+    EXPECT_EQ(compute_parallel_budget(opts), 1);
 
     std::vector<std::pair<std::string, int>> single_file = {{"1.in", 1}};
     opts.in_file_list = &single_file;

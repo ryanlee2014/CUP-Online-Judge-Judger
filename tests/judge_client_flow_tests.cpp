@@ -1,4 +1,5 @@
 #include "test_common.h"
+#include "../judge_client_runtime_bridge.h"
 
 TEST(RealProjectFlow) {
     TempDir tmp;
@@ -338,6 +339,30 @@ TEST(WSJudgedDebugArg) {
     const char *argv[] = {"wsjudged", "1", "2", "/tmp", "debug"};
     EXPECT_EQ(wsjudged_main(5, argv), 0);
     EXPECT_EQ(test_hooks::state().last_exec_path, "/usr/bin/judge_client");
+}
+
+TEST(BootstrapRuntimeBridgeCapture) {
+    ScopedGlobalRuntimeGuard runtime_guard;
+    DEBUG = 1;
+    record_call = 1;
+    admin = true;
+    no_sim = true;
+    MYSQL_MODE = false;
+    READ_FROM_STDIN = true;
+    judger_number = 7;
+    std::strcpy(oj_home, "/tmp/cup");
+
+    auto runtime = capture_bootstrap_runtime_from_globals();
+    EXPECT_TRUE(runtime.debug);
+    EXPECT_TRUE(runtime.record_call);
+    EXPECT_TRUE(runtime.admin);
+    EXPECT_TRUE(runtime.no_sim);
+    EXPECT_TRUE(runtime.disable_mysql);
+    EXPECT_TRUE(runtime.read_from_stdin);
+    EXPECT_TRUE(runtime.has_dir);
+    EXPECT_EQ(runtime.dir, "/tmp/cup");
+    EXPECT_TRUE(runtime.has_runner_id);
+    EXPECT_EQ(runtime.runner_id, 7);
 }
 
 
