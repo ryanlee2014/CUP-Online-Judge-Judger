@@ -68,6 +68,23 @@ bool apply_runtime_error_action(bool is_killed_error, const std::string &content
     }
     return false;
 }
+
+bool update_output_limit_state(int isspj, const char *userfile, long outfile_size, int &ACflg) {
+    if (isspj) {
+        return false;
+    }
+    return get_file_size(userfile) > outfile_size * 2 + 1024 && ACflg != OUTPUT_LIMIT_EXCEEDED;
+}
+
+void update_ptrace_violation_state(int syscall_id, int solution_id, int &ACflg,
+                                   const JudgeEnv &env, const char *work_dir) {
+    ACflg = RUNTIME_ERROR;
+    string error_text;
+    error_text = string("Current Program use not allowed system call.\nSolution ID:") + to_string(solution_id) + "\n";
+    error_text += string("Syscall ID:") + to_string(syscall_id) + "\n";
+    write_log(env.oj_home.c_str(), error_text.c_str());
+    print_runtimeerror(error_text.c_str(), work_dir);
+}
 }  // namespace
 
 #ifdef __i386
@@ -94,7 +111,7 @@ bool handle_error_conditions(shared_ptr<Language> &languageModel, const char *er
 
 bool handle_output_limit(int isspj, const char *userfile, long outfile_size, int &ACflg, pid_t pidApp,
                          const JudgeConfigSnapshot &config) {
-    if (!isspj && get_file_size(userfile) > outfile_size * 2 + 1024) {
+    if (update_output_limit_state(isspj, userfile, outfile_size, ACflg)) {
         ACflg = OUTPUT_LIMIT_EXCEEDED;
         if (config.use_ptrace) {
             ptrace(PTRACE_KILL, pidApp, NULL, NULL);
@@ -164,13 +181,7 @@ void handle_ptrace_syscall(pid_t pidApp, int &ACflg, int solution_id, int *call_
         } else if (record_syscall) {
             call_counter_local[reg.REG_SYSCALL] = 1;
         } else {
-            ACflg = RUNTIME_ERROR;
-            string _error;
-            _error = string("Current Program use not allowed system call.\nSolution ID:") + to_string(solution_id) +
-                     "\n";
-            _error += string("Syscall ID:") + to_string(reg.REG_SYSCALL) + "\n";
-            write_log(env.oj_home.c_str(), _error.c_str());
-            print_runtimeerror(_error.c_str(), work_dir);
+            update_ptrace_violation_state(static_cast<int>(reg.REG_SYSCALL), solution_id, ACflg, env, work_dir);
             ptrace(PTRACE_KILL, pidApp, NULL, NULL);
         }
         ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
