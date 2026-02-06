@@ -44,6 +44,8 @@ void apply_mysql_config(const MysqlConfigValues &cfg, JudgeContext &ctx) {
 }
 
 void apply_bootstrap_legacy_state(JudgeContext &ctx) {
+    // Compatibility bridge: only used during startup to seed context from legacy globals.
+    // Runtime business logic must read from ctx, not from global static_var fields.
     JudgeEnv legacy_env = capture_env();
     JudgeRuntimeFlags legacy_flags = capture_runtime_flags();
     ctx.env.oj_home = legacy_env.oj_home;

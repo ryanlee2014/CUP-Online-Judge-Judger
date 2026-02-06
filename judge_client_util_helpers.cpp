@@ -70,43 +70,93 @@ bool parse_new_args(int argc, char **argv, ParsedArgs &parsed) {
     return true;
 }
 
-void apply_parsed_args(const ParsedArgs &parsed, int &solution_id, int &runner_id, string &judgerId) {
-    if (parsed.debug) {
+InitRuntimeConfig build_runtime_from_parsed(const ParsedArgs &parsed) {
+    InitRuntimeConfig runtime;
+    runtime.debug = parsed.debug;
+    runtime.no_record = parsed.no_record;
+    runtime.record_call = parsed.record_call;
+    runtime.admin = parsed.admin;
+    runtime.no_sim = parsed.no_sim;
+    runtime.disable_mysql = parsed.disable_mysql;
+    runtime.read_from_stdin = parsed.read_from_stdin;
+    runtime.has_lang_name = parsed.has_lang_name;
+    runtime.has_dir = parsed.has_dir;
+    runtime.has_solution_id = parsed.has_solution_id;
+    runtime.has_runner_id = parsed.has_runner_id;
+    runtime.has_judger_id = parsed.has_judger_id;
+    runtime.lang_name = parsed.lang_name;
+    runtime.dir = parsed.dir;
+    runtime.solution_id = parsed.solution_id;
+    runtime.runner_id = parsed.runner_id;
+    runtime.judger_id = parsed.judger_id;
+    return runtime;
+}
+
+InitRuntimeConfig build_runtime_from_legacy(int argc, char **argv) {
+    InitRuntimeConfig runtime;
+    runtime.debug = (argc > 4);
+    runtime.record_call = (argc > 5);
+    if (argc > 5 && !strcmp(argv[5], "DEBUG")) {
+        runtime.no_record = true;
+        runtime.record_call = false;
+    }
+    if (argc > 5) {
+        runtime.has_lang_name = true;
+        runtime.lang_name = argv[5];
+    }
+    runtime.has_dir = true;
+    runtime.dir = (argc > 3) ? argv[3] : "/home/judge";
+    runtime.has_solution_id = true;
+    runtime.solution_id = atoi(argv[1]);
+    runtime.has_runner_id = true;
+    runtime.runner_id = atoi(argv[2]);
+    return runtime;
+}
+
+void apply_runtime_to_outputs(const InitRuntimeConfig &runtime, int &solution_id, int &runner_id, string &judgerId) {
+    if (runtime.has_solution_id) {
+        solution_id = runtime.solution_id;
+    }
+    if (runtime.has_runner_id) {
+        runner_id = runtime.runner_id;
+    }
+    if (runtime.has_judger_id) {
+        judgerId = runtime.judger_id;
+    }
+}
+
+void apply_runtime_to_globals(const InitRuntimeConfig &runtime) {
+    // Legacy compatibility only: bootstrap writes CLI parse results into static globals.
+    // Subsequent execution should rely on JudgeContext snapshots, not these globals.
+    if (runtime.debug) {
         DEBUG = true;
     }
-    if (parsed.no_record) {
+    if (runtime.no_record) {
         NO_RECORD = 1;
     }
-    if (parsed.record_call) {
+    if (runtime.record_call) {
         record_call = 1;
     }
-    if (parsed.admin) {
+    if (runtime.admin) {
         admin = true;
     }
-    if (parsed.no_sim) {
+    if (runtime.no_sim) {
         no_sim = true;
     }
-    if (parsed.disable_mysql) {
+    if (runtime.disable_mysql) {
         MYSQL_MODE = false;
     }
-    if (parsed.read_from_stdin) {
+    if (runtime.read_from_stdin) {
         READ_FROM_STDIN = true;
     }
-    if (parsed.has_lang_name) {
-        strcpy(LANG_NAME, parsed.lang_name.c_str());
+    if (runtime.has_lang_name) {
+        strcpy(LANG_NAME, runtime.lang_name.c_str());
     }
-    if (parsed.has_dir) {
-        strcpy(oj_home, parsed.dir.c_str());
+    if (runtime.has_dir) {
+        strcpy(oj_home, runtime.dir.c_str());
     }
-    if (parsed.has_solution_id) {
-        solution_id = parsed.solution_id;
-    }
-    if (parsed.has_runner_id) {
-        judger_number = parsed.runner_id;
-        runner_id = parsed.runner_id;
-    }
-    if (parsed.has_judger_id) {
-        judgerId = parsed.judger_id;
+    if (runtime.has_runner_id) {
+        judger_number = runtime.runner_id;
     }
 }
 

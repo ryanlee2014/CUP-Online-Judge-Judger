@@ -65,7 +65,7 @@ void run_solution_common(int &lang, const JudgePaths &paths, const double &time_
     shared_ptr<Language> languageModel(getLanguageModel(lang));
     int nice_result = nice(19);
     (void) nice_result;
-    set_child_work_dir(paths.work_dir.c_str());
+    set_child_work_dir(paths.work_dir.c_str(), false);
     string input_path;
     string output_path;
     string error_path;
@@ -82,7 +82,7 @@ void run_solution_common(int &lang, const JudgePaths &paths, const double &time_
     auto languageModel = language_factory ? language_factory(lang) : shared_ptr<Language>(getLanguageModel(lang));
     int nice_result = nice(19);
     (void) nice_result;
-    set_child_work_dir(paths.work_dir.c_str());
+    set_child_work_dir(paths.work_dir.c_str(), false);
     string input_path;
     string output_path;
     string error_path;

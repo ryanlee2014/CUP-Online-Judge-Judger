@@ -39,26 +39,14 @@ void init_parameters(int argc, char **argv, int &solution_id,
     }
     judge_util_helpers::ParsedArgs parsed;
     if (judge_util_helpers::parse_new_args(argc, argv, parsed)) {
-        judge_util_helpers::apply_parsed_args(parsed, solution_id, runner_id, judgerId);
+        judge_util_helpers::InitRuntimeConfig runtime = judge_util_helpers::build_runtime_from_parsed(parsed);
+        judge_util_helpers::apply_runtime_to_outputs(runtime, solution_id, runner_id, judgerId);
+        judge_util_helpers::apply_runtime_to_globals(runtime);
         return;
     }
-    DEBUG = (argc > 4);
-    if (argc > 5 && !strcmp(argv[5], "DEBUG")) {
-        NO_RECORD = 1;
-    } else {
-        record_call = (argc > 5);
-    }
-    if (argc > 5) {
-        strcpy(LANG_NAME, argv[5]);
-    }
-    if (argc > 3)
-        strcpy(oj_home, argv[3]);
-    else
-        strcpy(oj_home, "/home/judge");
-
-    solution_id = atoi(argv[1]);
-    runner_id = atoi(argv[2]);
-    judger_number = runner_id;
+    judge_util_helpers::InitRuntimeConfig runtime = judge_util_helpers::build_runtime_from_legacy(argc, argv);
+    judge_util_helpers::apply_runtime_to_outputs(runtime, solution_id, runner_id, judgerId);
+    judge_util_helpers::apply_runtime_to_globals(runtime);
 }
 
 void print_call_array() {

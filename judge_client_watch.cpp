@@ -28,10 +28,19 @@ void watch_solution_ex(pid_t pidApp, char *infile, int &ACflg, int isspj,
                        int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
                        int &PEflg, char *work_dir, const JudgeConfigSnapshot &config,
                        const JudgeEnv &env, bool record_syscall, bool debug_enabled) {
+    watch_solution_ex(pidApp, infile, ACflg, isspj, userfile, outfile, solution_id, lang, topmemory, mem_lmt, usedtime,
+                      time_lmt, p_id, PEflg, work_dir, config, env, record_syscall, debug_enabled, call_counter);
+}
+
+void watch_solution_ex(pid_t pidApp, char *infile, int &ACflg, int isspj,
+                       char *userfile, char *outfile, int solution_id, int lang,
+                       int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
+                       int &PEflg, char *work_dir, const JudgeConfigSnapshot &config,
+                       const JudgeEnv &env, bool record_syscall, bool debug_enabled, int *call_counter_local) {
     WatchOptions options{&config, &env, work_dir, record_syscall, debug_enabled};
     WatchState state{ACflg, topmemory, usedtime};
     watch_solution_common(pidApp, infile, isspj, userfile, outfile, solution_id, lang, mem_lmt,
-                          "error.out", call_counter, state, options);
+                          "error.out", call_counter_local, state, options);
 }
 
 void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int isspj,

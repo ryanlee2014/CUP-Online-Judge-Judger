@@ -18,6 +18,12 @@ void watch_solution_ex(pid_t pidApp, char *infile, int &ACflg, int isspj,
                        int &PEflg, char *work_dir, const JudgeConfigSnapshot &config,
                        const JudgeEnv &env,
                        bool record_syscall, bool debug_enabled);
+void watch_solution_ex(pid_t pidApp, char *infile, int &ACflg, int isspj,
+                       char *userfile, char *outfile, int solution_id, int lang,
+                       int &topmemory, int mem_lmt, double &usedtime, double time_lmt, int &p_id,
+                       int &PEflg, char *work_dir, const JudgeConfigSnapshot &config,
+                       const JudgeEnv &env,
+                       bool record_syscall, bool debug_enabled, int *call_counter_local);
 
 void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int isspj,
                                  char *userfile, char *outfile, int solution_id, int lang,

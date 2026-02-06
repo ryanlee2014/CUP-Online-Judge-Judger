@@ -7,6 +7,7 @@
 
 #include "header/static_var.h"
 #include "judge_client_adapter.h"
+#include "judge_client_case_executor.h"
 #include "judge_client_context.h"
 #include "model/judge/language/Language.h"
 #include "model/submission/SubmissionInfo.h"
@@ -37,13 +38,9 @@ void apply_parallel_result(const JudgeSeriesResult &r, int num_of_test, double t
                            const ResultSender &sender);
 bool should_continue_cases(int ACflg, const JudgeConfigSnapshot &config);
 
-void run_single_testcase(JudgeContext &ctx, int runner_id, int solution_id,
-                         int num_of_test, int memoryLimit, double timeLimit, char *work_dir,
-                         char *infile, char *outfile, char *userfile, char *usercode,
-                         std::string &global_work_dir, int &topmemory, int &ACflg, int &PEflg,
-                         int &pass_point, double &pass_rate, int &finalACflg, double &usedtime,
-                         double &max_case_time, const int *syscall_template,
-                         const std::pair<std::string, int> &infilePair);
+struct RunSingleTestcaseRequest;
+void run_single_testcase(JudgeContext &ctx, const RunSingleTestcaseRequest &request,
+                         JudgePaths &paths, std::string &global_work_dir, CaseExecutionState &state);
 
 double calculate_pass_rate(double pass_rate, int num_of_test);
 void send_progress_update(double usedtime, int topmemory, double timeLimit, int memoryLimit,

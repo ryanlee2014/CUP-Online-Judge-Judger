@@ -4,7 +4,6 @@
 #include <csignal>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include <sys/ptrace.h>
@@ -19,6 +18,23 @@
 using namespace std;
 
 namespace judge_watch_helpers {
+namespace {
+std::string read_file_tail(const char *path, long file_size, long max_bytes) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file.good()) {
+        return "";
+    }
+    long read_bytes = std::min(file_size, max_bytes);
+    if (read_bytes <= 0) {
+        return "";
+    }
+    file.seekg(file_size - read_bytes, std::ios::beg);
+    std::string data(static_cast<size_t>(read_bytes), '\0');
+    file.read(&data[0], read_bytes);
+    data.resize(static_cast<size_t>(file.gcount()));
+    return data;
+}
+}  // namespace
 
 #ifdef __i386
 #define REG_SYSCALL orig_eax
@@ -33,10 +49,8 @@ bool handle_error_conditions(shared_ptr<Language> &languageModel, const char *er
     long error_size = get_file_size(errorFile);
     bool has_error = error_size > 0;
     if (has_error && error_size != last_error_size) {
-        fstream file(errorFile, ios::ate);
-        stringstream buffer;
-        buffer << file.rdbuf();
-        string contents(buffer.str());
+        // Read only the tail to keep per-iteration I/O bounded for large runtime errors.
+        string contents = read_file_tail(errorFile, error_size, 4096);
         if (debug_enabled) {
             cerr << "Catch error:" << endl;
             cerr << contents << endl;

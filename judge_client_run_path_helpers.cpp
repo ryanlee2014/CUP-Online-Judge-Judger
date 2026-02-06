@@ -6,7 +6,6 @@
 #include <cstring>
 #include <unistd.h>
 
-#include "header/static_var.h"
 #include "judge_client_path_utils.h"
 
 namespace judge_run_helpers {
@@ -15,8 +14,8 @@ std::string join_path(const char *base, const char *name) {
     return judge_path_utils::join_path(base, name);
 }
 
-void set_child_work_dir(const char *work_dir) {
-    if (chdir(work_dir) != 0 && DEBUG) {
+void set_child_work_dir(const char *work_dir, bool debug_enabled) {
+    if (chdir(work_dir) != 0 && debug_enabled) {
         perror("chdir");
     }
 }

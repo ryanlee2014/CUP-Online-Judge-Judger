@@ -12,13 +12,12 @@
 
 using namespace std;
 
-extern int call_counter[call_array_size];
-
 CaseExecutionOutput execute_single_case(const CaseExecutionInput &input) {
     CaseExecutionOutput output = input.state;
     char infile[BUFFER_SIZE] = {};
     char outfile[BUFFER_SIZE] = {};
     char userfile[BUFFER_SIZE] = {};
+    int call_counter_local[call_array_size] = {};
 
     prepare_files(input.io.infile_pair->first.c_str(), input.io.infile_pair->second, infile, input.ctx.p_id,
                   const_cast<char *>(input.io.paths->work_dir.c_str()), outfile, userfile, input.runner_id);
@@ -27,9 +26,10 @@ CaseExecutionOutput execute_single_case(const CaseExecutionInput &input) {
     input.io.paths->userfile = userfile;
 
     if (input.io.syscall_template) {
-        memcpy(call_counter, input.io.syscall_template, sizeof(int) * call_array_size);
+        memcpy(call_counter_local, input.io.syscall_template, sizeof(int) * call_array_size);
     } else {
-        InitManager::initSyscallLimits(input.ctx.lang, call_counter, input.ctx.flags.record_call != 0, call_array_size);
+        InitManager::initSyscallLimits(input.ctx.lang, call_counter_local, input.ctx.flags.record_call != 0,
+                                       call_array_size);
     }
     pid_t pidApp = spawn_child([&]() {
         run_solution(input.ctx.lang, const_cast<char *>(input.io.paths->work_dir.c_str()), input.limits.time_limit,
@@ -40,7 +40,7 @@ CaseExecutionOutput execute_single_case(const CaseExecutionInput &input) {
                           input.ctx.lang, output.topmemory, input.limits.memory_limit, output.usedtime,
                           input.limits.time_limit, input.ctx.p_id, output.PEflg,
                           const_cast<char *>(input.io.paths->work_dir.c_str()), input.ctx.config, input.ctx.env,
-                          input.ctx.flags.record_call != 0, input.ctx.flags.debug != 0);
+                          input.ctx.flags.record_call != 0, input.ctx.flags.debug != 0, call_counter_local);
         judge_solution(input.ctx, output.ACflg, output.usedtime, input.limits.time_limit, input.ctx.special_judge,
                        infile, outfile, userfile, input.io.usercode, output.PEflg,
                        const_cast<char *>(input.io.paths->work_dir.c_str()), output.topmemory, input.limits.memory_limit,
