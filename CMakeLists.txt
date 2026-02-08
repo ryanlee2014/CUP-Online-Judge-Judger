@@ -49,8 +49,10 @@ if (ENABLE_TESTS)
         tests/judge_client_test.cpp
         tests/wsjudged_test.cpp
         tests/judge_client_flow_tests.cpp
+        tests/judge_client_case_executor_tests.cpp
         tests/judge_client_run_tests.cpp
         tests/judge_client_watch_tests.cpp
+        tests/judge_client_report_io_tests.cpp
         tests/judge_lib_tests.cpp
         tests/language_tests.cpp
         tests/compare_tests.cpp

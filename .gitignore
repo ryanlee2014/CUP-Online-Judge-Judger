@@ -67,6 +67,7 @@
 .idea
 /**/.idea/**
 .vscode/settings.json
+.codex/
 .trae/
 /docs/
 cmake-build-debug/cmake_install.cmake
