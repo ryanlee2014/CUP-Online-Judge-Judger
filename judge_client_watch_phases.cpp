@@ -5,7 +5,20 @@
 namespace judge_watch_helpers {
 
 WatchAction watch_phase_wait(WatchContext &ctx) {
+    // In production, wait4() should block until the child changes state.
+    // Under UNIT_TEST builds, wait4 is macro-overridden (see tests/test_hooks.h).
+    // If a test stub returns an invalid result, bail out to avoid spinning forever.
+#ifdef UNIT_TEST
+    pid_t ret = wait4(ctx.pidApp, &ctx.status, 0, &ctx.ruse);
+    if (ret < 0) {
+        if (ctx.state && ctx.state->ACflg == ACCEPT) {
+            ctx.state->ACflg = RUNTIME_ERROR;
+        }
+        return WatchAction::Stop;
+    }
+#else
     wait4(ctx.pidApp, &ctx.status, 0, &ctx.ruse);
+#endif
     return WatchAction::Continue;
 }
 
@@ -23,6 +36,16 @@ WatchAction watch_phase_resource(WatchContext &ctx) {
     if (metrics.stop) {
         return WatchAction::Stop;
     }
+#ifdef UNIT_TEST
+    // If the child is stopped but ptrace is disabled, there is no way to make forward progress.
+    // This can happen in UNIT_TEST when a stub returns a "stopped" wait status.
+    if (WIFSTOPPED(ctx.status) && !ctx.options->config->use_ptrace) {
+        if (ctx.state && ctx.state->ACflg == ACCEPT) {
+            ctx.state->ACflg = RUNTIME_ERROR;
+        }
+        return WatchAction::Stop;
+    }
+#endif
     if (WIFEXITED(ctx.status)) {
         return WatchAction::Stop;
     }

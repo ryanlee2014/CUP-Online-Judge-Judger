@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <thread>
 
 #include "judge_client_watch_internal.h"
 #include "judge_client_path_utils.h"
@@ -11,6 +12,48 @@
 using namespace std;
 
 namespace judge_watch_helpers {
+
+#ifdef UNIT_TEST
+namespace {
+void dump_watch_diagnostics(const WatchContext &ctx) {
+    const int st = ctx.status;
+    long error_size = 0;
+    if (!ctx.error_path.empty()) {
+        error_size = get_file_size(ctx.error_path.c_str());
+    }
+    std::cerr << "watch_solution_common: timeout/stall diagnostics\n";
+    std::cerr << "  pid=" << ctx.pidApp << " status=" << st << " (0x" << std::hex << st << std::dec << ")\n";
+    std::cerr << "  WIFEXITED=" << (WIFEXITED(st) ? 1 : 0)
+              << " WEXITSTATUS=" << (WIFEXITED(st) ? WEXITSTATUS(st) : -1)
+              << " WIFSIGNALED=" << (WIFSIGNALED(st) ? 1 : 0)
+              << " WTERMSIG=" << (WIFSIGNALED(st) ? WTERMSIG(st) : -1)
+              << " WIFSTOPPED=" << (WIFSTOPPED(st) ? 1 : 0)
+              << " WSTOPSIG=" << (WIFSTOPPED(st) ? WSTOPSIG(st) : -1)
+              << "\n";
+    if (ctx.state) {
+        std::cerr << "  ACflg=" << ctx.state->ACflg
+                  << " topmemory=" << ctx.state->topmemory
+                  << " usedtime=" << ctx.state->usedtime
+                  << " last_error_size=" << ctx.state->last_error_size
+                  << " outfile_size=" << ctx.state->outfile_size
+                  << " io_tick=" << ctx.state->io_tick
+                  << "\n";
+    }
+    if (ctx.options && ctx.options->config) {
+        std::cerr << "  flags: debug=" << (ctx.options->debug_enabled ? 1 : 0)
+                  << " record_syscall=" << (ctx.options->record_syscall ? 1 : 0)
+                  << " use_ptrace=" << ctx.options->config->use_ptrace
+                  << " all_test_mode=" << ctx.options->config->all_test_mode
+                  << "\n";
+    }
+    std::cerr << "  error_path=" << (ctx.error_path.empty() ? "<empty>" : ctx.error_path)
+              << " error_size=" << error_size << "\n";
+    std::cerr << "  infile=" << (ctx.infile ? ctx.infile : "<null>")
+              << " userfile=" << (ctx.userfile ? ctx.userfile : "<null>")
+              << " outfile=" << (ctx.outfile ? ctx.outfile : "<null>") << "\n";
+}
+}  // namespace
+#endif
 
 void build_parallel_error_name(int file_id, char *errorOutput) {
     judge_path_utils::build_parallel_error_name(file_id, errorOutput);
@@ -71,7 +114,21 @@ void watch_solution_common(pid_t pidApp, char *infile, int isspj,
             WatchPhase::Signal,
             WatchPhase::Ptrace};
     state.last_io_check = std::chrono::steady_clock::now();
+#ifdef UNIT_TEST
+    const auto start = std::chrono::steady_clock::now();
+    const auto max_wall_time = std::chrono::seconds(2);
+#endif
     while (true) {
+#ifdef UNIT_TEST
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        if (elapsed > max_wall_time) {
+            dump_watch_diagnostics(context);
+            if (state.ACflg == ACCEPT) {
+                state.ACflg = RUNTIME_ERROR;
+            }
+            break;
+        }
+#endif
         bool check_io = should_check_io(state.io_tick, state.last_io_check, io_check_ms, io_check_interval);
         bool should_stop = false;
         for (WatchPhase phase : kPhaseOrder) {
@@ -83,6 +140,10 @@ void watch_solution_common(pid_t pidApp, char *infile, int isspj,
         if (should_stop) {
             break;
         }
+#ifdef UNIT_TEST
+        // Avoid pegging a CPU if a stubbed wait status never reaches a terminal state.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
     }
     add_watch_usedtime(state.usedtime, context.ruse);
 }

@@ -25,6 +25,16 @@ struct ParallelBudgetDecision {
     size_t total_files = 0;
 };
 
+template <typename T>
+void apply_runtime_bindings(T &opts, const JudgeConfigSnapshot &config, const JudgeEnv &env,
+                            bool record_syscall, bool debug_enabled, const int *syscall_template) {
+    opts.config = &config;
+    opts.env = &env;
+    opts.record_syscall = record_syscall;
+    opts.debug_enabled = debug_enabled;
+    opts.syscall_template = syscall_template;
+}
+
 ParallelBudgetDecision decide_parallel_budget(const ParallelRunOptions &opts) {
     ParallelBudgetDecision decision;
     decision.workers = max(int(thread::hardware_concurrency()), 1);
@@ -54,6 +64,17 @@ ParallelBudgetDecision decide_parallel_budget(const ParallelRunOptions &opts) {
         decision.workers = static_cast<int>(decision.total_files);
     }
     return decision;
+}
+
+size_t resolve_parallel_chunk_size(size_t total_files, int workers, int env_chunk) {
+    if (total_files == 0) {
+        return 0;
+    }
+    size_t chunk_size = (total_files + static_cast<size_t>(workers) - 1) / static_cast<size_t>(workers);
+    if (env_chunk > 0) {
+        chunk_size = static_cast<size_t>(env_chunk);
+    }
+    return max<size_t>(1, min(chunk_size, total_files));
 }
 
 void log_parallel_budget_decision(const ParallelRunOptions &opts, const ParallelBudgetDecision &decision,
@@ -87,11 +108,7 @@ RunTaskOptions build_run_task_options(int runner_id, int language, char *work_di
     opts.usercode = usercode;
     opts.case_index = num_of_test;
     opts.global_work_dir = &global_work_dir;
-    opts.config = &config;
-    opts.env = &env;
-    opts.record_syscall = record_syscall;
-    opts.debug_enabled = debug_enabled;
-    opts.syscall_template = syscall_template;
+    apply_runtime_bindings(opts, config, env, record_syscall, debug_enabled, syscall_template);
     return opts;
 }
 
@@ -115,17 +132,47 @@ ParallelRunOptions build_parallel_run_options(int runner_id, int language, char 
     opts.special_judge = SPECIAL_JUDGE;
     opts.global_work_dir = &global_work_dir;
     opts.submission = &submissionInfo;
-    opts.config = &config;
-    opts.env = &env;
-    opts.record_syscall = record_syscall;
-    opts.debug_enabled = debug_enabled;
-    opts.syscall_template = syscall_template;
+    apply_runtime_bindings(opts, config, env, record_syscall, debug_enabled, syscall_template);
     return opts;
+}
+
+RunTaskOptions build_parallel_case_task_options(const ParallelRunOptions &opts, const pair<string, int> &infilePair,
+                                                int case_index, int base_ac) {
+    RunTaskOptions task_opts;
+    task_opts.runner_id = opts.runner_id;
+    task_opts.language = opts.submission->getLanguage();
+    task_opts.work_dir = opts.work_dir;
+    task_opts.infile_pair = &infilePair;
+    task_opts.ACflg = base_ac;
+    task_opts.special_judge = opts.special_judge;
+    task_opts.solution_id = opts.submission->getSolutionId();
+    task_opts.time_limit = opts.submission->getTimeLimit();
+    task_opts.used_time = 0;
+    task_opts.memory_limit = opts.submission->getMemoryLimit();
+    task_opts.problem_id = opts.submission->getProblemId();
+    task_opts.usercode = opts.usercode;
+    task_opts.case_index = case_index;
+    task_opts.global_work_dir = opts.global_work_dir;
+    task_opts.config = opts.config;
+    task_opts.env = opts.env;
+    task_opts.record_syscall = opts.record_syscall;
+    task_opts.debug_enabled = opts.debug_enabled;
+    task_opts.syscall_template = opts.syscall_template;
+    task_opts.language_factory = opts.language_factory;
+    task_opts.compare_factory = opts.compare_factory;
+    return task_opts;
 }
 }  // namespace
 
 int compute_parallel_budget(const ParallelRunOptions &opts) {
     return decide_parallel_budget(opts).workers;
+}
+
+size_t compute_parallel_chunk_size(size_t total_files, int workers, int env_chunk) {
+    if (workers <= 0) {
+        workers = 1;
+    }
+    return resolve_parallel_chunk_size(total_files, workers, env_chunk);
 }
 
 void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &usedtime,
@@ -247,6 +294,8 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
         return {3, 0, 0, 0, 0};
     }
     JudgeSeriesResult finalResult = {3, 0, 0, 0, 0};
+    int env_chunk = read_env_int("JUDGE_PARALLEL_CHUNK");
+    size_t chunk_size = resolve_parallel_chunk_size(total, workers, env_chunk);
 #ifdef UNIT_TEST
     for (size_t i = 0; i < total; ++i) {
         JudgeResult r{};
@@ -260,12 +309,6 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
 #endif
     ThreadPool pool(workers);
     vector<future<ChunkResult>> result;
-    size_t chunk_size = (total + workers - 1) / workers;
-    int env_chunk = read_env_int("JUDGE_PARALLEL_CHUNK");
-    if (env_chunk > 0) {
-        chunk_size = static_cast<size_t>(env_chunk);
-    }
-    chunk_size = max<size_t>(1, min(chunk_size, total));
     log_parallel_budget_decision(opts, budget, chunk_size, env_chunk);
     const int base_ac = *opts.ac_flag;
     result.reserve((total + chunk_size - 1) / chunk_size);
@@ -276,28 +319,7 @@ JudgeSeriesResult runParallelJudge(const ParallelRunOptions &opts) {
             chunk.results.reserve(end - start);
             for (size_t i = start; i < end; ++i) {
                 const auto &infilePair = inFileList[i];
-                RunTaskOptions task_opts;
-                task_opts.runner_id = opts.runner_id;
-                task_opts.language = opts.submission->getLanguage();
-                task_opts.work_dir = opts.work_dir;
-                task_opts.infile_pair = &infilePair;
-                task_opts.ACflg = base_ac;
-                task_opts.special_judge = opts.special_judge;
-                task_opts.solution_id = opts.submission->getSolutionId();
-                task_opts.time_limit = opts.submission->getTimeLimit();
-                task_opts.used_time = 0;
-                task_opts.memory_limit = opts.submission->getMemoryLimit();
-                task_opts.problem_id = opts.submission->getProblemId();
-                task_opts.usercode = opts.usercode;
-                task_opts.case_index = static_cast<int>(i);
-                task_opts.global_work_dir = opts.global_work_dir;
-                task_opts.config = opts.config;
-                task_opts.env = opts.env;
-                task_opts.record_syscall = opts.record_syscall;
-                task_opts.debug_enabled = opts.debug_enabled;
-                task_opts.syscall_template = opts.syscall_template;
-                task_opts.language_factory = opts.language_factory;
-                task_opts.compare_factory = opts.compare_factory;
+                RunTaskOptions task_opts = build_parallel_case_task_options(opts, infilePair, static_cast<int>(i), base_ac);
                 JudgeResult r = runJudgeTask(task_opts);
                 chunk.results.push_back(r);
             }

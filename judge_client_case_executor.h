@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <string>
+#include <sys/types.h>
 #include <utility>
 
 #include "judge_client_context.h"
@@ -42,3 +44,7 @@ struct CaseExecutionInput {
 using CaseExecutionOutput = CaseExecutionState;
 
 CaseExecutionOutput execute_single_case(const CaseExecutionInput &input);
+
+using CaseSpawnFunction = std::function<pid_t(const std::function<void()> &)>;
+void set_case_spawn_function_for_test(const CaseSpawnFunction &spawn_fn);
+void reset_case_spawn_function_for_test();

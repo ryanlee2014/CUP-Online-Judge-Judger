@@ -56,6 +56,7 @@ struct ParallelRunOptions {
 };
 
 int compute_parallel_budget(const ParallelRunOptions &opts);
+size_t compute_parallel_chunk_size(size_t total_files, int workers, int env_chunk);
 
 void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
                   int &mem_lmt, const JudgeConfigSnapshot &config);
