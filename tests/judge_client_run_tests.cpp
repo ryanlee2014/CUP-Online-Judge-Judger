@@ -153,6 +153,110 @@ TEST(JudgeClientRunOverloadCoverage) {
     EXPECT_TRUE(series.pass_point >= 0);
 }
 
+TEST(JudgeClientRunCompatOverloads) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeEnv env = make_env_with_home(root);
+    languageNameReader.loadJSON("{\"0\":\"fake\"}");
+    std::filesystem::create_directories(tmp.path / "data" / "1");
+    write_file(tmp.path / "data" / "1" / "1.in", "");
+    write_file(tmp.path / "data" / "1" / "1.out", "");
+    write_file(tmp.path / "error0.out", "");
+    std::string work = tmp.path.string();
+    std::string global = work + "/";
+    std::pair<std::string, int> infilePair("1.in", 1);
+    char usercode[16] = "code";
+    int ac = ACCEPT;
+    bool record_syscall = false;
+    bool debug_enabled = false;
+    int syscall_template[call_array_size] = {};
+    test_hooks::state().compare_result = ACCEPT;
+    test_hooks::state().wait4_status = 0;
+
+    JudgeResult res = runJudgeTask(1, 0, work.data(), infilePair, ac, 0, 1, 1.0,
+                                   0.0, 64, 1, usercode, 0, global, make_config_snapshot(),
+                                   env, record_syscall, debug_enabled, syscall_template);
+    EXPECT_EQ(res.ACflg, ACCEPT);
+
+    SubmissionInfo submission;
+    submission.setLanguage(0).setSolutionId(1).setTimeLimit(1).setMemoryLimit(64).setProblemId(1);
+    std::vector<std::pair<std::string, int>> inFileList = {{"1.in", 1}, {"2.in", 1}};
+    auto series = runParallelJudge(1, 0, work.data(), const_cast<char *>("code"), 1, 0, 64,
+                                   inFileList, ac, 0, global, submission, make_config_snapshot(),
+                                   env, record_syscall, debug_enabled, syscall_template);
+    EXPECT_TRUE(series.pass_point >= 0);
+}
+
+TEST(JudgeClientRunSolutionFactoryOverloads) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    auto old_cwd = std::filesystem::current_path();
+    (void)make_env_with_home(tmp.path.string());
+    languageNameReader.loadJSON("{\"0\":\"fake\"}");
+    write_file(tmp.path / "data.in", "1");
+    write_file(tmp.path / "data1.in", "1");
+    int lang = 0;
+    double tl = 1.0;
+    double used = 0.0;
+    int mem = 64;
+    RuntimeTestInputs runtime = make_runtime_test_inputs(false, true, true, false);
+    auto work = tmp.path.string();
+    auto language_factory = [](int id) { return std::shared_ptr<Language>(getLanguageModel(id)); };
+
+    int stdout_fd = dup(fileno(stdout));
+    int stderr_fd = dup(fileno(stderr));
+    expect_exit([&]() { run_solution(lang, work.data(), tl, used, mem, runtime.config, language_factory); }, 0);
+    std::filesystem::current_path(old_cwd);
+    if (stdout_fd >= 0) {
+        fflush(stdout);
+        dup2(stdout_fd, fileno(stdout));
+        close(stdout_fd);
+    }
+    if (stderr_fd >= 0) {
+        fflush(stderr);
+        dup2(stderr_fd, fileno(stderr));
+        close(stderr_fd);
+    }
+
+    stdout_fd = dup(fileno(stdout));
+    stderr_fd = dup(fileno(stderr));
+    expect_exit([&]() {
+        run_solution(lang, work.data(), static_cast<const double &>(tl), static_cast<const double &>(used),
+                     static_cast<const int &>(mem), runtime.config, language_factory);
+    }, 0);
+    std::filesystem::current_path(old_cwd);
+    if (stdout_fd >= 0) {
+        fflush(stdout);
+        dup2(stdout_fd, fileno(stdout));
+        close(stdout_fd);
+    }
+    if (stderr_fd >= 0) {
+        fflush(stderr);
+        dup2(stderr_fd, fileno(stderr));
+        close(stderr_fd);
+    }
+
+    stdout_fd = dup(fileno(stdout));
+    stderr_fd = dup(fileno(stderr));
+    expect_exit([&]() {
+        run_solution_parallel(lang, work.data(), tl, used, mem, 1, runtime.config, language_factory);
+    }, 0);
+    std::filesystem::current_path(old_cwd);
+    if (stdout_fd >= 0) {
+        fflush(stdout);
+        dup2(stdout_fd, fileno(stdout));
+        close(stdout_fd);
+    }
+    if (stderr_fd >= 0) {
+        fflush(stderr);
+        dup2(stderr_fd, fileno(stderr));
+        close(stderr_fd);
+    }
+}
+
 TEST(JudgeClientRunParallelJudge) {
     test_hooks::reset();
     ScopedGlobalRuntimeGuard runtime_guard;
@@ -216,6 +320,59 @@ TEST(JudgeClientParallelBudgetBranches) {
         EXPECT_TRUE(workers >= 1);
         EXPECT_TRUE(workers <= 3);
     }
+}
+
+TEST(JudgeClientParallelChunkBoundary) {
+    EXPECT_EQ(compute_parallel_chunk_size(0, 4, -1), static_cast<size_t>(0));
+    EXPECT_EQ(compute_parallel_chunk_size(5, 2, -1), static_cast<size_t>(3));
+    EXPECT_EQ(compute_parallel_chunk_size(5, 2, 1), static_cast<size_t>(1));
+    EXPECT_EQ(compute_parallel_chunk_size(5, 2, 99), static_cast<size_t>(5));
+    EXPECT_EQ(compute_parallel_chunk_size(5, 0, -1), static_cast<size_t>(5));
+}
+
+TEST(JudgeClientRunParallelJudgeEmptyList) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeEnv env = make_env_with_home(root);
+    std::string work = tmp.path.string();
+    std::string global = work + "/";
+    SubmissionInfo submission;
+    submission.setLanguage(0).setSolutionId(1).setTimeLimit(1).setMemoryLimit(64).setProblemId(1);
+    std::vector<std::pair<std::string, int>> inFileList;
+    int ac = ACCEPT;
+    bool record_syscall = false;
+    bool debug_enabled = false;
+    auto res = runParallelJudge(1, 0, work.data(), const_cast<char *>("code"), 1, 0, 64,
+                                inFileList, ac, 0, global, submission, make_config_snapshot(),
+                                env, record_syscall, debug_enabled);
+    EXPECT_EQ(res.ACflg, 3);
+    EXPECT_EQ(res.topMemory, 0);
+    EXPECT_EQ(res.usedTime, 0);
+    EXPECT_EQ(res.num, 0);
+}
+
+TEST(JudgeClientRunParallelJudgeAbnormalStatus) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeEnv env = make_env_with_home(root);
+    std::string work = tmp.path.string();
+    std::string global = work + "/";
+    SubmissionInfo submission;
+    submission.setLanguage(0).setSolutionId(1).setTimeLimit(1).setMemoryLimit(64).setProblemId(1);
+    std::vector<std::pair<std::string, int>> inFileList = {{"1.in", 1}, {"2.in", 1}, {"3.in", 1}};
+    int ac = RUNTIME_ERROR;
+    bool record_syscall = false;
+    bool debug_enabled = false;
+    auto res = runParallelJudge(1, 0, work.data(), const_cast<char *>("code"), 1, 0, 64,
+                                inFileList, ac, 0, global, submission, make_config_snapshot(),
+                                env, record_syscall, debug_enabled);
+    EXPECT_EQ(res.ACflg, RUNTIME_ERROR);
+    EXPECT_EQ(res.pass_point, 0);
+    EXPECT_EQ(res.num, 0);
 }
 
 

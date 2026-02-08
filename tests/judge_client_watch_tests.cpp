@@ -1,4 +1,5 @@
 #include "test_common.h"
+#include "../judge_client_watch_internal.h"
 
 TEST(JudgeClientWatchSolutionBranches) {
     test_hooks::reset();
@@ -447,6 +448,103 @@ TEST(JudgeClientWatchSolutionWithFileIdPtraceBranch) {
                                 runtime.record_syscall, runtime.debug_enabled);
     EXPECT_EQ(call_counter_local[12], 1);
     std::filesystem::current_path(old_cwd);
+}
+
+TEST(JudgeClientWatchInternalHandlers) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeEnv env = make_env_with_home(root);
+    JudgeConfigSnapshot config;
+    config.use_ptrace = 1;
+    std::shared_ptr<Language> language_model = std::make_shared<Bash>();
+
+    long last_error_size = 0;
+    int ac = ACCEPT;
+    write_file(tmp.path / "error.out", "");
+    EXPECT_TRUE(!judge_watch_helpers::handle_error_conditions(language_model,
+                                                              (tmp.path / "error.out").string().c_str(),
+                                                              ac, 1, 1, last_error_size, false, config, env,
+                                                              root.c_str()));
+
+    write_file(tmp.path / "error.out", "Killed by signal");
+    EXPECT_TRUE(judge_watch_helpers::handle_error_conditions(language_model,
+                                                             (tmp.path / "error.out").string().c_str(),
+                                                             ac, 1, 1, last_error_size, false, config, env,
+                                                             root.c_str()));
+
+    last_error_size = 0;
+    ac = ACCEPT;
+    config.all_test_mode = 0;
+    write_file(tmp.path / "error.out", "runtime error");
+    EXPECT_TRUE(judge_watch_helpers::handle_error_conditions(language_model,
+                                                             (tmp.path / "error.out").string().c_str(),
+                                                             ac, 1, 1, last_error_size, false, config, env,
+                                                             root.c_str()));
+    EXPECT_EQ(ac, RUNTIME_ERROR);
+}
+
+TEST(JudgeClientWatchInternalStatusHandlers) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeConfigSnapshot config;
+    config.use_ptrace = 1;
+    std::shared_ptr<Language> language_model = std::make_shared<Bash>();
+    int ac = ACCEPT;
+
+    EXPECT_EQ(judge_watch_helpers::map_signal_to_ac(SIGXCPU), TIME_LIMIT_EXCEEDED);
+    EXPECT_EQ(judge_watch_helpers::map_signal_to_ac(SIGXFSZ), OUTPUT_LIMIT_EXCEEDED);
+    EXPECT_EQ(judge_watch_helpers::map_signal_to_ac(SIGILL), RUNTIME_ERROR);
+
+    EXPECT_TRUE(!judge_watch_helpers::handle_exit_status(language_model, (0 << 8), ac, 1, false, config,
+                                                         root.c_str()));
+    EXPECT_TRUE(judge_watch_helpers::handle_exit_status(language_model, (SIGXFSZ << 8), ac, 1, false, config,
+                                                        root.c_str()));
+    EXPECT_EQ(ac, OUTPUT_LIMIT_EXCEEDED);
+
+    ac = ACCEPT;
+    EXPECT_TRUE(!judge_watch_helpers::handle_signal_status(0, ac, false, root.c_str()));
+    EXPECT_TRUE(judge_watch_helpers::handle_signal_status(SIGXCPU, ac, true, root.c_str()));
+    EXPECT_EQ(ac, TIME_LIMIT_EXCEEDED);
+
+    ac = ACCEPT;
+    EXPECT_TRUE(judge_watch_helpers::handle_signal_status(SIGSYS, ac, false, root.c_str()));
+    EXPECT_EQ(ac, RUNTIME_ERROR);
+
+    ac = ACCEPT;
+    config.use_ptrace = 0;
+    EXPECT_TRUE(judge_watch_helpers::handle_exit_status(language_model, (SIGTERM << 8), ac, 1, false, config,
+                                                        root.c_str()));
+    EXPECT_EQ(ac, RUNTIME_ERROR);
+}
+
+TEST(JudgeClientWatchInternalPtraceHandlers) {
+    test_hooks::reset();
+    ScopedGlobalRuntimeGuard runtime_guard;
+    TempDir tmp;
+    std::string root = tmp.path.string();
+    JudgeEnv env = make_env_with_home(root);
+    JudgeConfigSnapshot config;
+    config.use_ptrace = 1;
+    int call_counter_local[call_array_size] = {};
+    int ac = ACCEPT;
+
+    call_counter_local[7] = 1;
+    test_hooks::state().ptrace_syscall = 7;
+    judge_watch_helpers::handle_ptrace_syscall(1, ac, 1, call_counter_local, false, config, env, root.c_str());
+    EXPECT_EQ(ac, ACCEPT);
+
+    call_counter_local[7] = 0;
+    judge_watch_helpers::handle_ptrace_syscall(1, ac, 1, call_counter_local, true, config, env, root.c_str());
+    EXPECT_EQ(call_counter_local[7], 1);
+
+    call_counter_local[8] = 0;
+    test_hooks::state().ptrace_syscall = 8;
+    judge_watch_helpers::handle_ptrace_syscall(1, ac, 1, call_counter_local, false, config, env, root.c_str());
+    EXPECT_EQ(ac, RUNTIME_ERROR);
 }
 
 
