@@ -6,6 +6,6 @@
 #define JUDGE_LIBRARY_SYSCALL64_H
 
 #include <sys/syscall.h>
-int LANG_LUAV[256] = {0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 21, 59, 158, 231, 292, 17, 257, 8, 0};
+int LANG_LUAV[256] = {0, 17, 257, 8, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 21, 59, 158, 231, 292, 0};
 
 #endif //JUDGE_LIBRARY_SYSCALL64_H

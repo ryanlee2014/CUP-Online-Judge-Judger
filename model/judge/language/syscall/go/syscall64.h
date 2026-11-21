@@ -5,5 +5,5 @@
 #ifndef JUDGE_LIBRARY_SYSCALL64_H
 #define JUDGE_LIBRARY_SYSCALL64_H
 #include <sys/syscall.h>
-int LANG_GOV[256] = {0, 1, 9, 11, 13, 14, 56, 59, 131, 158, 202, 204, 228, 231, 186, 257, 267, 72, 0};
+int LANG_GOV[256] = {0, 186, 257, 267, 72, 1, 9, 11, 13, 14, 56, 59, 131, 158, 202, 204, 228, 231, 0};
 #endif //JUDGE_LIBRARY_SYSCALL64_H
