@@ -67,7 +67,7 @@ int SpecialJudge::run(char *oj_home, int problem_id, char *infile, char *outfile
         // file limit
         LIM.rlim_cur = LIM.rlim_max = 50 * STD_MB;
         setrlimit(RLIMIT_FSIZE, &LIM);
-        LIM.rlim_cur = LIM.rlim_max = 1024 * STD_MB;
+        LIM.rlim_cur = LIM.rlim_max = 3072 * STD_MB;
         setrlimit(RLIMIT_AS, &LIM);
         string dir = oj_home;
         dir += "/data/" + to_string(problem_id) + "/";
