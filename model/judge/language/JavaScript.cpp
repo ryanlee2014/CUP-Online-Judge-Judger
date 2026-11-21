@@ -32,6 +32,7 @@ void JavaScript::setProcessLimit() {
 }
 
 void JavaScript::buildRuntime(const char *work_dir) {
+    Language::buildRuntime(work_dir);
     execute_cmd("mkdir -p %s/dev", work_dir);
     execute_cmd("/bin/mount -o bind /dev %s/dev", work_dir);
     execute_cmd("/bin/mkdir -p %s/usr/lib64 %s/lib64/ %s/lib64/", work_dir, work_dir, work_dir);
@@ -74,7 +75,7 @@ void JavaScript::buildRuntime(const char *work_dir) {
     execute_cmd("/bin/cp /usr/lib64/libicudata.so.* %s/lib64/", work_dir);
 
 
-    execute_cmd("/bin/cp /usr/local/bin/node %s/", work_dir);
+    execute_cmd("/bin/cp /usr/local/lib/judge-node %s/node", work_dir);
 }
 
 double JavaScript::buildTimeLimit(double timeLimit, double bonus) {

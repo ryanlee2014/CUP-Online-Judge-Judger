@@ -14,5 +14,5 @@ int LANG_YV[256] = {0, 39, 99, 302, 99, 32, 72, 131, 1, 2, 3, 4, 5, 6, 8, 9, 10,
                     SYS_getuid, SYS_ioctl, SYS_lseek, SYS_lstat, SYS_mmap, SYS_mprotect,
                     SYS_munmap, SYS_open, SYS_read, SYS_readlink, SYS_rt_sigaction,
                     SYS_rt_sigprocmask, SYS_set_robust_list, SYS_set_tid_address, SYS_stat,
-                    SYS_write, 0};
+                    SYS_write, 17, 217, 0};
 #endif //JUDGE_LIBRARY_SYSCALL64_H

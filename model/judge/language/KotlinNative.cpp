@@ -34,7 +34,9 @@ void KotlinNative::initCallCounter(int *call_counter) {
 }
 
 void KotlinNative::setProcessLimit() {
-    Language::setProcessLimit();
+    struct rlimit LIM;
+    LIM.rlim_cur = LIM.rlim_max = 80;
+    setrlimit(RLIMIT_NPROC, &LIM);
 }
 
 double KotlinNative::buildTimeLimit(double timeLimit, double bonus) {

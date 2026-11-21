@@ -12,5 +12,5 @@ int LANG_BASICV[256] = {0, 1, 2, 3, 4, 5, 9, 10, 12, 13, 14, 16, 21, 59, 97, 158
                         SYS_execve, SYS_exit_group, SYS_fstat, SYS_futex, SYS_getrlimit,
                         SYS_ioctl, SYS_ioperm, SYS_mmap, SYS_open, SYS_read, SYS_rt_sigaction,
                         SYS_rt_sigprocmask, SYS_set_robust_list, SYS_set_thread_area,
-                        SYS_set_tid_address, SYS_stat, SYS_uname, SYS_write, 0};
+                        SYS_set_tid_address, SYS_stat, SYS_uname, SYS_write, 102, 104, 107, 108, 17, 257, 302, 0};
 #endif //JUDGE_LIBRARY_SYSCALL64_H

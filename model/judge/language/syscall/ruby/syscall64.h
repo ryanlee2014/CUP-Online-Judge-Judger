@@ -11,5 +11,5 @@ int LANG_RV[256] = {0, 1, 2, 3, 4, 5, 9, 10, 12, 13, 14, 16, 21, 22, 56, 59, 72,
                     SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getuid, SYS_getrlimit,
                     SYS_mmap, SYS_mprotect, SYS_munmap, SYS_open, SYS_read,
                     SYS_rt_sigaction, SYS_rt_sigprocmask, SYS_set_robust_list,
-                    SYS_set_tid_address, SYS_write, 0};
+                    SYS_set_tid_address, SYS_write, 102, 104, 11, 157, 17, 217, 222, 226, 228, 257, 290, 302, 318, 39, 6, 79, 8, 99, 0};
 #endif //JUDGE_LIBRARY_SYSCALL64_H

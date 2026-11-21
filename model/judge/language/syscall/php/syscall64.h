@@ -13,5 +13,5 @@ int LANG_PHV[256] = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 16, 21, 59, 
                      SYS_mprotect, SYS_munmap, SYS_open, SYS_read, SYS_readlink,
                      SYS_rt_sigaction, SYS_rt_sigprocmask, SYS_set_robust_list,
                      SYS_set_thread_area, SYS_set_tid_address, SYS_stat, SYS_time, SYS_uname,
-                     SYS_write, 0};
+                     SYS_write, 17, 302, 318, 99, 0};
 #endif //JUDGE_LIBRARY_SYSCALL64_H

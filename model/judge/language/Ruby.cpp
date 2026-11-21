@@ -46,6 +46,9 @@ void Ruby::buildRuntime(const char *work_dir) {
     execute_cmd("cp -a /usr/lib64/ruby* %s/usr/lib64/", work_dir);
     execute_cmd("cp -a /usr/lib64/libruby* %s/usr/lib64/", work_dir);
     execute_cmd("cp -a /usr/bin/ruby* %s/", work_dir);
+    execute_cmd("mkdir -p %s/usr/lib/x86_64-linux-gnu", work_dir);
+    execute_cmd("cp -a /usr/lib/x86_64-linux-gnu/ruby %s/usr/lib/x86_64-linux-gnu/", work_dir);
+    execute_cmd("cp -a /usr/lib/x86_64-linux-gnu/libruby* %s/usr/lib/x86_64-linux-gnu/", work_dir);
 }
 
 double Ruby::buildTimeLimit(double timeLimit, double bonus) {

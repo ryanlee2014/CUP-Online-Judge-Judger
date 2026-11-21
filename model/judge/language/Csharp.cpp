@@ -53,6 +53,7 @@ void Csharp::buildRuntime(const char *work_dir) {
     execute_cmd("/bin/mkdir -p %s/home/judge", work_dir);
     execute_cmd("/bin/chown judge %s/home/judge", work_dir);
     execute_cmd("/bin/mkdir -p %s/etc", work_dir);
+    execute_cmd("/bin/cp -a /etc/mono %s/etc/", work_dir);
     execute_cmd("/bin/grep judge /etc/passwd>%s/etc/passwd", work_dir);
 }
 

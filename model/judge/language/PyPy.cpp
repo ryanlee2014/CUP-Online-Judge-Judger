@@ -34,6 +34,8 @@ void PyPy::buildRuntime(const char *work_dir) {
     execute_cmd("mkdir -p %s/usr/lib64", work_dir);
     execute_cmd("mkdir -p %s/usr/local/lib", work_dir);
     execute_cmd("cp -a /usr/local/pypy %s/", work_dir);
+    execute_cmd("cp -a /usr/local/pypy/bin/libpypy*-c.so %s/lib/", work_dir);
+    execute_cmd("cp -a /usr/local/pypy/lib/*.so* %s/lib/", work_dir);
     // execute_cmd("cp -a /usr/include/pypy* %s/usr/include/", work_dir);
     // execute_cmd("cp -a /usr/lib/libpython* %s/usr/lib/", work_dir);
     execute_cmd("cp -a /usr/lib64/libpthread.so.0 %s/usr/lib64/", work_dir);

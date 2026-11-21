@@ -36,6 +36,9 @@ void PyPy3::buildRuntime(const char *work_dir) {
     execute_cmd("mkdir -p %s/proc", work_dir);
     execute_cmd("cp -a /proc/cpuinfo %s/proc/", work_dir);
     execute_cmd("cp -a /usr/local/pypy3 %s/pypy3", work_dir);
+    execute_cmd("cp -a /usr/local/pypy3/bin/libpypy3*-c.so %s/lib/", work_dir);
+    execute_cmd("cp -a /usr/local/pypy3/lib/*.so* %s/lib/", work_dir);
+    execute_cmd("mkdir -p %s/usr/lib && cp -a /usr/lib/locale %s/usr/lib/", work_dir, work_dir);
     execute_cmd("cp -a /usr/local/pypy3/bin/libpypy3-c.so %s/usr/lib64/", work_dir);
     execute_cmd("cp -a /usr/local/pypy3/lib %s/usr/lib64", work_dir);
     execute_cmd("cp -a /usr/local/pypy3/lib %s/usr/lib", work_dir);

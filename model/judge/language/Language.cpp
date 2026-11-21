@@ -39,8 +39,8 @@ void Language::setFSizeLimit() {
 
 void Language::setASLimit() {
     struct rlimit LIM;
-    LIM.rlim_max = static_cast<rlim_t>(COMPILE_STD_MB * 768);
-    LIM.rlim_cur = static_cast<rlim_t>(COMPILE_STD_MB * 768);
+    LIM.rlim_max = static_cast<rlim_t>(COMPILE_STD_MB * 2048);
+    LIM.rlim_cur = static_cast<rlim_t>(COMPILE_STD_MB * 2048);
     setrlimit(RLIMIT_AS, &LIM);
 }
 
@@ -51,7 +51,7 @@ void Language::setAlarm() {
 void Language::compile(std::vector<std::string>& _args, const char* java_xms, const char* java_xmx) {
     if (_args.empty()) {
         std::cout << "Nothing to do" << std::endl;
-        exit(0);
+        _exit(0);
     }
     int len = static_cast<int>(_args.size());
     const char *args[len + 5];
@@ -113,7 +113,9 @@ void Language::setCompileMount(const char* work_dir) {
     execute_cmd("mount -o bind /etc/alternatives etc/alternatives");
     execute_cmd("mount -o bind /proc proc");
     execute_cmd("mount -o bind /dev dev");
+    execute_cmd("mkdir -p etc && /bin/cp -a /etc/mono etc/ 2>/dev/null");
     chroot(work_dir);
+    chdir("/");
 }
 
 int Language::getCompileResult(int status) {

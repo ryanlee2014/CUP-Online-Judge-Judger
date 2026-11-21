@@ -18,5 +18,5 @@ int LANG_CSV[256] = {0, 39, 157, 302, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 1
                      SYS_sched_getparam, SYS_sched_get_priority_max,
                      SYS_sched_get_priority_min, SYS_sched_getscheduler, SYS_set_robust_list,
                      SYS_set_thread_area, SYS_set_tid_address, SYS_sigaltstack, SYS_stat,
-                     SYS_statfs, SYS_tgkill, SYS_time, SYS_uname, SYS_unlink, SYS_write, 0};
+                     SYS_statfs, SYS_tgkill, SYS_time, SYS_uname, SYS_unlink, SYS_write, 17, 217, 0};
 #endif //JUDGE_LIBRARY_SYSCALL64_H

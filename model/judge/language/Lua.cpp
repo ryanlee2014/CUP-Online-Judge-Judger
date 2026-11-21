@@ -27,7 +27,7 @@ void Lua::buildRuntime(const char *work_dir) {
     Language::buildRuntime(work_dir);
     execute_cmd("/bin/mkdir -p %s/usr/local/lib", work_dir);
     execute_cmd("/bin/mkdir -p %s/usr/local/bin", work_dir);
-    execute_cmd("/bin/cp /usr/bin/lua* %s/lua", work_dir);
+    execute_cmd("/bin/cp -L /usr/bin/lua5.3 %s/lua", work_dir);
 }
 
 double Lua::buildTimeLimit(double timeLimit, double bonus) {
@@ -93,4 +93,7 @@ extlang createInstancelua() {
 
 deslang destroyInstancelua (Language* language) {
     delete language;
+}
+char **Lua::getArgs() {
+    return args;
 }
