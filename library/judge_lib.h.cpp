@@ -585,6 +585,29 @@ void setRunUser () {
         sleep(1);
 }
 
+// 运行阶段每个判题槽位用独立的 uid（20000 + 槽位号）：系统按 uid 统计进程/线程数（RLIMIT_NPROC），
+// 共用 judge 一个 uid 时，同时判的多份 Java 会互相挤占线程配额，出现 unable to create new native thread
+void setRunUserForRunner(int runner) {
+    uid_t uid = static_cast<uid_t>(20000 + (runner & 0xFFF));
+    while (setgid(1536) != 0)
+        sleep(1);
+    while (setresuid(uid, uid, uid) != 0)
+        sleep(1);
+}
+
+bool isJvmLanguage(int language) {
+    switch (language) {
+        case JAVA:
+        case JAVA8:
+        case JAVA7:
+        case JAVA6:
+        case KOTLIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool isPython(int language) {
     switch (language) {
         case PYTHON2:

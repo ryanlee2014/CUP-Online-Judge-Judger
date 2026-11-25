@@ -128,5 +128,9 @@ extern Compare::Compare* getCompareModel();
 
 extern bool isPython(int language);
 
+extern bool isJvmLanguage(int language);
+
 extern void setRunUser();
+
+extern void setRunUserForRunner(int runner);
 #endif //JUDGE_CLIENT_JUDGE_LIB_H

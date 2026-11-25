@@ -209,7 +209,7 @@ void run_solution_parallel(int &lang, char *work_dir, double &time_lmt, double &
     }
     // run me
     languageModel->buildChrootSandbox(work_dir);
-    setRunUser();
+    setRunUserForRunner(judger_number);
     //      char java_p1[BUFFER_SIZE], java_p2[BUFFER_SIZE];
     // child
     // set the limit
@@ -270,7 +270,7 @@ void run_solution(int &lang, char *work_dir, double &time_lmt, double &usedtime,
     }
     // run me
     languageModel->buildChrootSandbox(work_dir);
-    setRunUser();
+    setRunUserForRunner(judger_number);
     //      char java_p1[BUFFER_SIZE], java_p2[BUFFER_SIZE];
     // child
     // set the limit
@@ -391,6 +391,16 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
 
         if (WIFEXITED(status))
             break;
+        // JVM 自己会用 SIGSEGV/SIGBUS/SIGCHLD/SIGUSR2 等信号（安全点、隐式空指针检查、线程挂起），
+        // 这类信号停顿要原样转交给程序，不能当成运行错误，也不能去读一个并非系统调用的编号
+        if (use_ptrace && WIFSTOPPED(status) && isJvmLanguage(lang)) {
+            int stopSig = WSTOPSIG(status);
+            if (stopSig != SIGTRAP && stopSig != SIGKILL && stopSig != SIGXCPU
+                && stopSig != SIGXFSZ && stopSig != SIGALRM) {
+                ptrace(PTRACE_SYSCALL, pidApp, NULL, stopSig);
+                continue;
+            }
+        }
         bool has_error = get_file_size("error.out") > 0;
         if (has_error) {
             if (DEBUG) {
@@ -574,6 +584,16 @@ void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int iss
 
         if (WIFEXITED(status))
             break;
+        // JVM 自己会用 SIGSEGV/SIGBUS/SIGCHLD/SIGUSR2 等信号（安全点、隐式空指针检查、线程挂起），
+        // 这类信号停顿要原样转交给程序，不能当成运行错误，也不能去读一个并非系统调用的编号
+        if (use_ptrace && WIFSTOPPED(status) && isJvmLanguage(lang)) {
+            int stopSig = WSTOPSIG(status);
+            if (stopSig != SIGTRAP && stopSig != SIGKILL && stopSig != SIGXCPU
+                && stopSig != SIGXFSZ && stopSig != SIGALRM) {
+                ptrace(PTRACE_SYSCALL, pidApp, NULL, stopSig);
+                continue;
+            }
+        }
         bool has_error = get_file_size(errorFile) > 0;
         if (has_error) {
             if (DEBUG) {
