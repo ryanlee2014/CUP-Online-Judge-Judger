@@ -164,7 +164,8 @@ int compile(int lang, char *work_dir) {
         status = languageModel->getCompileResult(status);
         if (DEBUG)
             printf("status=%d\n", status);
-        execute_cmd("/bin/umount -f bin usr lib lib64 etc/alternatives proc dev 2>&1 >/dev/null");
+        // 不再用相对路径 umount（bin usr ... proc dev）：老版 util-linux 找不到同名挂载点时会按「来源名」匹配，
+        // 「umount proc」会卸掉别的判题槽位刚挂上的 /proc（C# 并发误判的根因），甚至尝试卸宿主机 /proc
         execute_cmd("/bin/umount -f %s/* 2>&1 >/dev/null", work_dir);
         umount(work_dir);
         return status;

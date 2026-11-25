@@ -194,7 +194,8 @@ void umount(char *work_dir) {
     execute_cmd("/bin/umount -f %s/usr ", work_dir);
     execute_cmd("/bin/umount -f %s/bin ", work_dir);
     execute_cmd("/bin/umount -f %s/proc ", work_dir);
-    execute_cmd("/bin/umount -f bin usr lib lib64 etc/alternatives proc dev ");
+    // 不再用相对路径 umount（bin usr ... proc dev）：老版 util-linux 找不到同名挂载点时会按「来源名」匹配，
+    // 「umount proc」会卸掉别的判题槽位刚挂上的 /proc（C# 并发误判的根因），甚至尝试卸宿主机 /proc
     execute_cmd("/bin/umount -f %s/* ", work_dir);
     execute_cmd("/bin/umount -f %s/log/* ", work_dir);
     execute_cmd("/bin/umount -f %s/log/etc/alternatives ", work_dir);
