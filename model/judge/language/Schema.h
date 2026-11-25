@@ -23,7 +23,7 @@ public:
 protected:
     char** getArgs() override;
 private:
-    char** args = (char*[]){"/guile", "Main.scm", (char *) nullptr};
+    char** args = (char*[]){"/guile", "--no-auto-compile", "Main.scm", (char *) nullptr};
 };
 
 

@@ -30,6 +30,9 @@ void Objc::buildRuntime(const char *work_dir) {
     Language::buildRuntime(work_dir);
     execute_cmd("/bin/mkdir -p %s/proc", work_dir);
     execute_cmd("/bin/mount -o bind /proc %s/proc", work_dir);
+    // GNUstep 初始化 GnuTLS 要读 /dev/urandom
+    execute_cmd("/bin/mkdir -p %s/dev", work_dir);
+    execute_cmd("/bin/mount -o bind /dev %s/dev", work_dir);
     execute_cmd("/bin/mkdir -p %s/lib/", work_dir);
     execute_cmd(
             "/bin/cp -aL /lib/libdbus-1.so.3                          %s/lib/ ",

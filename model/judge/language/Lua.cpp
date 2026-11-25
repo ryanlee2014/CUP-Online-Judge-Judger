@@ -27,7 +27,8 @@ void Lua::buildRuntime(const char *work_dir) {
     Language::buildRuntime(work_dir);
     execute_cmd("/bin/mkdir -p %s/usr/local/lib", work_dir);
     execute_cmd("/bin/mkdir -p %s/usr/local/bin", work_dir);
-    execute_cmd("/bin/cp -L /usr/bin/lua5.3 %s/lua", work_dir);
+    // Ubuntu 叫 lua5.3，CentOS 只有 lua（5.1，与同机 luac 版本一致）
+    execute_cmd("/bin/cp -L \"$(command -v lua5.3 || command -v lua)\" %s/lua", work_dir);
 }
 
 double Lua::buildTimeLimit(double timeLimit, double bonus) {

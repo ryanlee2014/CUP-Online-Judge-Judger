@@ -634,6 +634,9 @@ void fillLazyLib64(const char *work_dir) {
     // 先放 64 位 glibc 核心库，再按 ldd 结果补齐；沙箱里也有 32 位程序，它们解析到的 /lib 下 32 位库要跳过（只收 ELFCLASS64）
     execute_cmd("cd %s && for p in libnss_files libnss_dns libresolv libgcc_s libnsl libutil libcrypt libdl libpthread librt libm libc libstdc++ libz; do"
                 " for f in /lib64/$p.so* /lib64/$p-*.so; do [ -e \"$f\" ] && [ ! -e lib64/${f##*/} ] && /bin/cp -L \"$f\" lib64/; done; done", work_dir);
+    // Objective-C 的程序本身（Main）不扫，按 GNUstep 运行库补齐
+    execute_cmd("cd %s && if [ -e Main.m ]; then for f in /lib64/libobjc.so* /lib64/libgnustep-base.so*; do"
+                " [ -e \"$f\" ] && [ ! -e lib64/${f##*/} ] && /bin/cp -L \"$f\" lib64/; done; fi", work_dir);
     execute_cmd("cd %s && find . -xdev -type f ! -name 'Main*' ! -path './proc/*' ! -path './dev/*' \\( -name '*.so*' -o -perm -100 \\) -print0 2>/dev/null"
                 " | xargs -0 -r ldd 2>/dev/null | awk '$2==\"=>\" && $3 ~ /^\\// {print $3}' | sort -u"
                 " | while read l; do b=${l##*/}; [ -e lib64/$b ] && continue;"

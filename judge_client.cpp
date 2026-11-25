@@ -391,9 +391,10 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
 
         if (WIFEXITED(status))
             break;
-        // JVM 自己会用 SIGSEGV/SIGBUS/SIGCHLD/SIGUSR2 等信号（安全点、隐式空指针检查、线程挂起），
+        // JVM 自己会用 SIGSEGV/SIGBUS/SIGCHLD/SIGUSR2 等信号（安全点、隐式空指针检查、线程挂起）；
+        // Go 1.14+ 用 SIGURG 做抢占式调度，任何语言收到 SIGURG 都原样转交，
         // 这类信号停顿要原样转交给程序，不能当成运行错误，也不能去读一个并非系统调用的编号
-        if (use_ptrace && WIFSTOPPED(status) && isJvmLanguage(lang)) {
+        if (use_ptrace && WIFSTOPPED(status) && (isJvmLanguage(lang) || WSTOPSIG(status) == SIGURG)) {
             int stopSig = WSTOPSIG(status);
             if (stopSig != SIGTRAP && stopSig != SIGKILL && stopSig != SIGXCPU
                 && stopSig != SIGXFSZ && stopSig != SIGALRM) {
@@ -520,6 +521,12 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
         // check the system calls
         if (use_ptrace) {
             ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
+            // 程序处理完信号执行 rt_sigreturn 后，退出停顿里的 orig_rax 是 -1（内核为防止系统调用重启而置位），
+            // 并不是一次新的系统调用，直接放行（Go 运行时、Ruby 等都会用信号）
+            if ((long long) reg.REG_SYSCALL < 0) {
+                ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
+                continue;
+            }
             if (call_counter[reg.REG_SYSCALL]) {
                 //call_counter[reg.REG_SYSCALL]--;
             } else if (record_call) {
@@ -584,9 +591,10 @@ void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int iss
 
         if (WIFEXITED(status))
             break;
-        // JVM 自己会用 SIGSEGV/SIGBUS/SIGCHLD/SIGUSR2 等信号（安全点、隐式空指针检查、线程挂起），
+        // JVM 自己会用 SIGSEGV/SIGBUS/SIGCHLD/SIGUSR2 等信号（安全点、隐式空指针检查、线程挂起）；
+        // Go 1.14+ 用 SIGURG 做抢占式调度，任何语言收到 SIGURG 都原样转交，
         // 这类信号停顿要原样转交给程序，不能当成运行错误，也不能去读一个并非系统调用的编号
-        if (use_ptrace && WIFSTOPPED(status) && isJvmLanguage(lang)) {
+        if (use_ptrace && WIFSTOPPED(status) && (isJvmLanguage(lang) || WSTOPSIG(status) == SIGURG)) {
             int stopSig = WSTOPSIG(status);
             if (stopSig != SIGTRAP && stopSig != SIGKILL && stopSig != SIGXCPU
                 && stopSig != SIGXFSZ && stopSig != SIGALRM) {
@@ -713,6 +721,12 @@ void watch_solution_with_file_id(pid_t pidApp, char *infile, int &ACflg, int iss
         // check the system calls
         if (use_ptrace) {
             ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
+            // 程序处理完信号执行 rt_sigreturn 后，退出停顿里的 orig_rax 是 -1（内核为防止系统调用重启而置位），
+            // 并不是一次新的系统调用，直接放行（Go 运行时、Ruby 等都会用信号）
+            if ((long long) reg.REG_SYSCALL < 0) {
+                ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
+                continue;
+            }
             if (call_counter[reg.REG_SYSCALL]) {
                 //call_counter[reg.REG_SYSCALL]--;
             } else if (record_call) {
