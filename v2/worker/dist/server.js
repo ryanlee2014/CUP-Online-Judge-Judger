@@ -64,6 +64,14 @@ class JudgeServer {
         };
     }
     bind(socket) {
+        if (this.cfg.authToken) {
+            const q = (socket.handshake && socket.handshake.query) || {};
+            if (q.token !== this.cfg.authToken) {
+                console.warn(`rejected connection from ${socket.handshake && socket.handshake.address}: bad token`);
+                socket.disconnect(true);
+                return;
+            }
+        }
         const id = this.nextSocketId++;
         this.sockets.set(id, socket);
         socket.on("submission", (payload) => this.onSubmission(socket, payload));

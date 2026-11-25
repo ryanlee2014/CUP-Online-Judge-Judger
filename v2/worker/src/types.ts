@@ -85,4 +85,6 @@ export interface WorkerConfig {
 	simScript: string;         // legacy /usr/bin/sim.sh
 	maxSubmissionSeconds: number;
 	runtimeInfoMax: number;
+	/** if set, clients must connect with ?token=<authToken> (put it in the backend's judger.address) */
+	authToken?: string;
 }

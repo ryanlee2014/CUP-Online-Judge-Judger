@@ -1,0 +1,1 @@
+{"stdout":"/root/.pm2/logs/kc-judge-v2-out.log last 5 lines:\n7|kc-judge | go-judge v1.14.1 at http://127.0.0.1:5050; languages from /opt/kc-judge-v2/app/languages.json\n7|kc-judge | judge v2 listening on 0.0.0.0:5111\n\n{\"ok\":true,\"judging\":[],\"waiting\":0,\"free\":24}","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false}
