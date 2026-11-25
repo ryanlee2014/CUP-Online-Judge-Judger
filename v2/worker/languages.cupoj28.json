@@ -31,5 +31,5 @@
   "7":  {"name": "PHP",          "src": "Main.php",  "compile": ["/usr/bin/php", "-l", "Main.php"], "artifacts": [], "run": ["/usr/bin/php", "Main.php"], "bonus": true, "interpreted": true},
   "8":  {"name": "Perl",         "src": "Main.pl",   "compile": ["/usr/bin/perl", "-c", "Main.pl"], "artifacts": [], "run": ["/usr/bin/perl", "Main.pl"], "bonus": true, "interpreted": true},
   "12": {"name": "Scheme",       "src": "Main.scm",  "compile": null, "artifacts": [], "run": ["/usr/bin/guile", "--no-auto-compile", "Main.scm"], "runEnv": ["GUILE_INSTALL_LOCALE=0"], "bonus": true, "interpreted": true},
-  "15": {"name": "Lua",          "src": "Main.lua",  "compile": ["/usr/bin/luac5.3", "-o", "Main", "Main.lua"], "artifacts": ["Main"], "run": ["/usr/bin/lua5.3", "Main"], "bonus": true}
+  "15": {"name": "Lua",          "src": "Main.lua",  "compile": ["/usr/bin/luac5.3", "-o", "Main", "Main.lua"], "artifacts": ["Main"], "run": ["/usr/bin/lua5.3", "Main"], "bonus": true, "interpreted": true}
 }

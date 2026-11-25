@@ -247,7 +247,7 @@ class Judge {
             cpuLimit: cpu,
             clockLimit: cpu * 3 + 1000 * gojudge_1.MS,
             memoryLimit: memBytes,
-            stackLimit: memBytes,
+            stackLimit: Math.max(memBytes, 128 * gojudge_1.MB), // legacy judge: RLIMIT_STACK 128MB
             procLimit: lang.procLimit || 32
         };
     }
@@ -265,6 +265,10 @@ class Judge {
             case "Nonzero Exit Status":
                 if (lang.jvm && /OutOfMemoryError/.test(stderr))
                     return { verdict: 8 /* Verdict.MEMORY_LIMIT_EXCEEDED */, message: "" };
+                // legacy judge ignored the exit code of native programs (C/C++ `return 1;` still gets judged by output);
+                // for interpreters / JVM / Mono a nonzero exit means an uncaught exception -> runtime error
+                if (!lang.interpreted && !lang.jvm && !lang.run[0].includes("mono"))
+                    return null;
                 if (/MemoryError|std::bad_alloc|out of memory/i.test(stderr) && r.memory >= memMB * gojudge_1.MB * 0.9) {
                     return { verdict: 8 /* Verdict.MEMORY_LIMIT_EXCEEDED */, message: "" };
                 }
@@ -289,6 +293,11 @@ class Judge {
         const [r] = await this.gj.run([cmd]);
         const timeMs = Math.round(r.time / gojudge_1.MS);
         const memKB = Math.round(r.memory / 1024);
+        const produced = ((r.files && r.files.stdout) || "").length;
+        if (produced >= outMax && r.status !== "Accepted" && r.status !== "Memory Limit Exceeded") {
+            // stdout collector full: the program kept printing (go-judge may report it as TLE once the pipe blocks)
+            return { verdict: 9 /* Verdict.OUTPUT_LIMIT_EXCEEDED */, message: "", timeMs, memKB, diff: "" };
+        }
         const bad = this.classify(r, lang, memMB);
         if (bad) {
             return { verdict: bad.verdict, message: bad.message, timeMs, memKB, diff: "" };
