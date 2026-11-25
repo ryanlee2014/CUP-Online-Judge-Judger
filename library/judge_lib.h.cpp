@@ -621,3 +621,25 @@ bool isPython(int language) {
     return false;
 }
 
+
+// 与 Language::buildRuntime 的精简 /lib64 配套：扫描沙箱里从主机复制进来的可执行文件和 .so，
+// 把它们实际依赖的库补进沙箱 /lib64，再补上 glibc 运行时会按需 dlopen 的几个库。
+// 跳过用户代码产物（Main*）、/proc、/dev，不对用户提交的文件运行 ldd。
+void fillLazyLib64(const char *work_dir) {
+    char marker[BUFFER_SIZE];
+    sprintf(marker, "%s/.kc-lazy-lib64", work_dir);
+    if (access(marker, F_OK) != 0) {
+        return;
+    }
+    // 先放 64 位 glibc 核心库，再按 ldd 结果补齐；沙箱里也有 32 位程序，它们解析到的 /lib 下 32 位库要跳过（只收 ELFCLASS64）
+    execute_cmd("cd %s && for p in libnss_files libnss_dns libresolv libgcc_s libnsl libutil libcrypt libdl libpthread librt libm libc libstdc++ libz; do"
+                " for f in /lib64/$p.so* /lib64/$p-*.so; do [ -e \"$f\" ] && [ ! -e lib64/${f##*/} ] && /bin/cp -L \"$f\" lib64/; done; done", work_dir);
+    execute_cmd("cd %s && find . -xdev -type f ! -name 'Main*' ! -path './proc/*' ! -path './dev/*' \\( -name '*.so*' -o -perm -100 \\) -print0 2>/dev/null"
+                " | xargs -0 -r ldd 2>/dev/null | awk '$2==\"=>\" && $3 ~ /^\\// {print $3}' | sort -u"
+                " | while read l; do b=${l##*/}; [ -e lib64/$b ] && continue;"
+                " [ \"$(od -An -tu1 -j4 -N1 \"$l\" | tr -d ' ')\" = 2 ] || continue; /bin/cp -L \"$l\" lib64/$b; done", work_dir);
+    // Mono 运行时按 /etc/mono/config 的 dllmap 在 $mono_libdir（即 /lib64）里 dlopen 这些库，ldd 看不出来
+    execute_cmd("cd %s && if ls mono* >/dev/null 2>&1; then for f in /lib64/libmono* /lib64/libMonoPosixHelper* /lib64/libMonoSupportW* /lib64/libgdiplus.so* /lib64/libikvm-native*; do"
+                " [ -e \"$f\" ] && [ ! -e lib64/${f##*/} ] && /bin/cp -L \"$f\" lib64/; done; fi", work_dir);
+    unlink(marker);
+}

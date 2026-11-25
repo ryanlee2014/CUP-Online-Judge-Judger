@@ -1019,6 +1019,7 @@ int main(int argc, char **argv) {
 
     //create chroot for ruby bash python
     languageModel->buildRuntime(work_dir);
+    fillLazyLib64(work_dir);
     // read files and run
     double pass_rate = ZERO_PASSRATE;
     int num_of_test = 0;

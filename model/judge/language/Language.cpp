@@ -75,7 +75,9 @@ void Language::buildRuntime(const char* work_dir) {
     //  execute_cmd("/bin/cp -a /lib/i386-linux-gnu %s/lib/", work_dir);
     //  execute_cmd("/bin/cp -a /usr/lib/i386-linux-gnu %s/lib/", work_dir);
     execute_cmd("/bin/cp -a /lib/x86_64-linux-gnu %s/lib/", work_dir);
-    execute_cmd("/bin/cp /lib64/* %s/lib64/", work_dir);
+    // CentOS 上 /lib64 指向整个 /usr/lib64（约 2.4G），每次判题整目录复制会占满内存盘、拖到超时。
+    // 这类主机只放动态加载器，其余库在 buildRuntime 结束后按实际依赖补齐（fillLazyLib64）。
+    execute_cmd("if [ \"$(ls -A /lib64 | wc -l)\" -gt 300 ]; then /bin/cp -L /lib64/ld-linux-x86-64.so.2 %s/lib64/ && touch %s/.kc-lazy-lib64; else /bin/cp /lib64/* %s/lib64/; fi", work_dir, work_dir, work_dir);
     execute_cmd("/bin/cp /bin/busybox %s/bin/", work_dir);
     execute_cmd("/bin/ln -s /bin/busybox %s/bin/sh", work_dir);
     execute_cmd("/bin/cp /bin/bash %s/bin/bash", work_dir);
