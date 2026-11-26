@@ -328,3 +328,7 @@ model/judge/language/CMakeFiles/schema.dir/DependInfo.cmake
 model/judge/language/CMakeFiles/schema.dir/flags.make
 model/judge/language/CMakeFiles/schema.dir/link.txt
 model/judge/language/CMakeFiles/schema.dir/progress.make
+
+# KeyClaw tool output and judge v2 dependencies
+.keyclaw/
+v2/worker/node_modules/

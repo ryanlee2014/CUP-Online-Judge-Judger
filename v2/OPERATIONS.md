@@ -37,3 +37,7 @@
 - pm2（`PM2_HOME=/root/.pm2-n26 /opt/node26/bin/pm2`）：`kc-go-judge`（`run-go-judge-16.sh`，127.0.0.1:5050，挂载 `mount-cupoj16-nouserns.yaml`）、`kc-judge-v2`（127.0.0.1:5111，`judgerName` RATH，并发 6）。已 `pm2 save`，随 `kc-oj-pm2.service` 开机自启。
 - 语言表 `worker/languages.cupoj16.json`：路径按 .16 旧判题机；PHP 用 `-n` + 白名单扩展（.16 的 php.ini 会加载 redis 会话等）；Java 6/7 用 `MaxPermSize`；Go 编译 CPU 放宽到 60 秒。
 - 后端 `/home/CUP-Online-Judge-Express-n26/config.json` 的 `judger.address` 指向 5111；旧守护进程（5110）保留。回退：`bash /root/kc-backup-jv2-20261126-1455/rollback.sh`。
+
+## 从仓库部署 worker
+
+`v2/worker/node_modules` 不进仓库。部署前在 `v2/worker` 下执行 `npm ci --omit=dev`（Node 20+；`dist/` 已随仓库提交，改了 `src/` 再 `npx tsc` 重新生成），然后把 `dist/ node_modules/ package.json` 与对应机器的语言表（改名为 `languages.json`）复制到 `/opt/kc-judge-v2/app/`。

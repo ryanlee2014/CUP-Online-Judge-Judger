@@ -1,1 +1,0 @@
-{"stdout":"34:  \"15\": {\"name\": \"Lua\",          \"src\": \"Main.lua\",  \"compile\": [\"/usr/bin/luac5.3\", \"-o\", \"Main\", \"Main.lua\"], \"artifacts\": [\"Main\"], \"run\": [\"/usr/bin/lua5.3\", \"Main\"], \"bonus\": true, \"interpreted\": true}","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false}
