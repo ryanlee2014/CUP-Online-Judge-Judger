@@ -30,3 +30,10 @@
 - `node dist/replay.js --db /home/CUP-Online-Judge-Express/config.json --out x.jsonl --sql "<条件>" --limit N`：只读回放历史提交，与库里结论对比。
 - `bash oldjudge-replay.sh ids.txt out.tsv`：同机用旧判题机重判，做新旧同数据对照。
 - `node probe.js 'http://127.0.0.1:5111?token=...' sub.json`：按网站后端的方式发一份提交，打印全部进度事件。
+
+## acm（.16，CentOS 7.9）
+
+- 2026-11-26 起 acm 也用判题机 v2。.16 内核 3.10 且 `user.max_user_namespaces=0`，官方 go-judge 起不来；这里用打了 `deploy/go-judge-patch/go-sandbox-v0.14.6-no-userns.patch` 的构建（`/opt/kc-gojudge/go-judge-kc`），`KC_NO_USERNS=1` 启动：不建用户命名空间，其余 mount/pid/net/ipc/uts 隔离照旧；选手程序以 uid/gid 61536（宿主无此账号）运行，无 capability、无附加组、seccomp 照旧。系统安全设置没改。
+- pm2（`PM2_HOME=/root/.pm2-n26 /opt/node26/bin/pm2`）：`kc-go-judge`（`run-go-judge-16.sh`，127.0.0.1:5050，挂载 `mount-cupoj16-nouserns.yaml`）、`kc-judge-v2`（127.0.0.1:5111，`judgerName` RATH，并发 6）。已 `pm2 save`，随 `kc-oj-pm2.service` 开机自启。
+- 语言表 `worker/languages.cupoj16.json`：路径按 .16 旧判题机；PHP 用 `-n` + 白名单扩展（.16 的 php.ini 会加载 redis 会话等）；Java 6/7 用 `MaxPermSize`；Go 编译 CPU 放宽到 60 秒。
+- 后端 `/home/CUP-Online-Judge-Express-n26/config.json` 的 `judger.address` 指向 5111；旧守护进程（5110）保留。回退：`bash /root/kc-backup-jv2-20261126-1455/rollback.sh`。
