@@ -41,3 +41,9 @@
 ## 从仓库部署 worker
 
 `v2/worker/node_modules` 不进仓库。部署前在 `v2/worker` 下执行 `npm ci --omit=dev`（Node 20+；`dist/` 已随仓库提交，改了 `src/` 再 `npx tsc` 重新生成），然后把 `dist/ node_modules/ package.json` 与对应机器的语言表（改名为 `languages.json`）复制到 `/opt/kc-judge-v2/app/`。
+
+## 后端与判题机的通信（socket.io）
+
+- 2026-11-28 起两端都是 socket.io 4：判题机服务端 4.x，网站后端客户端 socket.io-client 4.x。两台的 `config.json` 都已设 `"allowEIO3": false`（只接受 4.x 客户端）。
+- 不写 `allowEIO3` 时默认 true，兼容 2.x 客户端；只在后端还没升级时需要。
+- 回退：`/root/kc-backup-eio3-*/rollback.sh`（恢复兼容）、后端 `/root/kc-backup-be-sio4-*/rollback.sh`（换回 2.x 客户端，需先恢复兼容）。
