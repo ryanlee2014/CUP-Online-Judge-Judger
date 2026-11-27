@@ -386,3 +386,7 @@ model/judge/language/CMakeFiles/schema.dir/progress.make
 *.gcov
 /coverage*.info
 ce.txt
+
+# KeyClaw tool output and judge v2 dependencies
+.keyclaw/
+v2/worker/node_modules/

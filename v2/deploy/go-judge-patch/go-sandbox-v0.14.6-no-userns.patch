@@ -1,0 +1,72 @@
+diff -ru a/container/container_exec_linux.go b/container/container_exec_linux.go
+--- a/container/container_exec_linux.go	2026-11-26 10:28:16.829485582 +0400
++++ b/container/container_exec_linux.go	2026-11-26 10:32:42.931901978 +0400
+@@ -2,6 +2,8 @@
+ 
+ import (
+ 	"fmt"
++	"os"
++	"strings"
+ 	"syscall"
+ 	"time"
+ 
+@@ -88,6 +90,12 @@
+ 			Gid:         uint32(c.ContainerGID),
+ 			NoSetGroups: true,
+ 		}
++		// KeyClaw: in the initial user namespace (no CLONE_NEWUSER) the container init
++		// is real root; drop its supplementary groups (e.g. gid 0) for user programs.
++		if inInitialUserNS() {
++			cred.Groups = []uint32{}
++			cred.NoSetGroups = false
++		}
+ 	}
+ 	r := forkexec.Runner{
+ 		Args:       cmd.Argv,
+@@ -232,3 +240,12 @@
+ 		}
+ 	}
+ }
++
++func inInitialUserNS() bool {
++	b, err := os.ReadFile("/proc/self/uid_map")
++	if err != nil {
++		return false
++	}
++	f := strings.Fields(string(b))
++	return len(f) == 3 && f[0] == "0" && f[1] == "0" && f[2] == "4294967295"
++}
+diff -ru a/container/container_init_linux.go b/container/container_init_linux.go
+--- a/container/container_init_linux.go	2026-11-26 10:28:16.829485582 +0400
++++ b/container/container_init_linux.go	2026-11-26 10:30:49.063582575 +0400
+@@ -324,6 +324,11 @@
+ func initFileSystem(c containerConfig) error {
+ 	// mount tmpfs as root
+ 	const tmpfs = "tmpfs"
++	// KeyClaw: without a user namespace the new mount namespace inherits shared
++	// propagation from the host (systemd), which makes pivot_root fail with EINVAL.
++	if err := syscall.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, ""); err != nil {
++		return fmt.Errorf("init_fs: make / private: %w", err)
++	}
+ 	if err := syscall.Mount(tmpfs, c.ContainerRoot, tmpfs, 0, ""); err != nil {
+ 		return fmt.Errorf("init_fs: mount /: %w", err)
+ 	}
+diff -ru a/container/environment_linux.go b/container/environment_linux.go
+--- a/container/environment_linux.go	2026-11-26 10:28:16.829485582 +0400
++++ b/container/environment_linux.go	2026-11-26 10:28:46.414759275 +0400
+@@ -246,6 +246,15 @@
+ 		cloneFlag = b.CloneFlags & forkexec.UnshareFlags
+ 	}
+ 
++	// KeyClaw: old kernels (e.g. CentOS 7, user.max_user_namespaces=0) cannot create
++	// user namespaces. When running as real root, skip CLONE_NEWUSER: the container init
++	// runs as host root inside new mount/pid/net/ipc/uts namespaces and user programs are
++	// executed with the unprivileged ContainerUID/GID plus seccomp.
++	if os.Getenv("KC_NO_USERNS") == "1" && os.Geteuid() == 0 {
++		cloneFlag &^= unix.CLONE_NEWUSER
++		uidMap, gidMap = nil, nil
++	}
++
+ 	exe := "/proc/self/exe"
+ 	if b.ExecFile != "" {
+ 		exe = b.ExecFile

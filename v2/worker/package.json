@@ -1,0 +1,25 @@
+{
+  "name": "cupoj-judge-v2",
+  "version": "2.0.0",
+  "description": "CUP Online Judge judge service v2: go-judge sandbox, protocol-compatible with the legacy judge daemon",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --test-force-exit dist/test/*.test.js",
+    "start": "node dist/main.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "socket.io-client": "^4.8.1",
+    "socket.io-client-v2": "npm:socket.io-client@2.5.0",
+    "typescript": "^5.6.0"
+  }
+}
