@@ -9,9 +9,10 @@ const fs_1 = __importDefault(require("fs"));
 const http_1 = __importDefault(require("http"));
 const os_1 = __importDefault(require("os"));
 const path_1 = __importDefault(require("path"));
-// socket.io v2 server: the website backend connects with socket.io-client 2.x (same as the legacy daemon)
+// socket.io v4 server. allowEIO3 (on by default) also accepts the website backend's socket.io-client 2.x,
+// so the backend can move to client 4.x later without a moment where the two cannot talk.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const SocketIO = require("socket.io");
+const { Server: SocketIOServer } = require("socket.io");
 /**
  * Protocol-compatible replacement of the legacy judge daemon (CUP-Online-Judge-Judge-Daemon-Service):
  *  in : `submission` {solutionId, admin, data, no_sim, priority}, `status`
@@ -44,9 +45,14 @@ class JudgeServer {
             res.writeHead(404);
             res.end();
         });
-        this.io = SocketIO(server);
+        this.io = new SocketIOServer(server, {
+            allowEIO3: this.cfg.allowEIO3 !== false,
+            // v2 defaulted to 100 MB per message, v4 to 1 MB; keep the old limit for large sources / test inputs
+            maxHttpBufferSize: 1e8
+        });
         this.io.on("connection", (socket) => this.bind(socket));
         server.listen(this.cfg.port, this.cfg.host, () => console.log(`judge v2 listening on ${this.cfg.host}:${this.cfg.port}`));
+        return server;
     }
     status() {
         const cpus = os_1.default.cpus();

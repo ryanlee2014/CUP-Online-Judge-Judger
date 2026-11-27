@@ -87,4 +87,6 @@ export interface WorkerConfig {
 	runtimeInfoMax: number;
 	/** if set, clients must connect with ?token=<authToken> (put it in the backend's judger.address) */
 	authToken?: string;
+	/** accept socket.io-client 2.x (Engine.IO v3) as well as 4.x; default true until every backend runs client 4.x */
+	allowEIO3?: boolean;
 }

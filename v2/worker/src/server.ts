@@ -5,9 +5,10 @@ import os from "os";
 import path from "path";
 import { Judge } from "./judge";
 import { JudgePayload, SubmissionInfo, WorkerConfig } from "./types";
-// socket.io v2 server: the website backend connects with socket.io-client 2.x (same as the legacy daemon)
+// socket.io v4 server. allowEIO3 (on by default) also accepts the website backend's socket.io-client 2.x,
+// so the backend can move to client 4.x later without a moment where the two cannot talk.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const SocketIO = require("socket.io");
+const { Server: SocketIOServer } = require("socket.io");
 
 interface Task {
 	solutionId: number;
@@ -38,7 +39,7 @@ export class JudgeServer {
 		this.freeSlots = [...Array(cfg.concurrency).keys()].map(i => i + 1);
 	}
 
-	start() {
+	start(): http.Server {
 		const server = http.createServer((req, res) => {
 			if (req.url === "/healthz") {
 				res.writeHead(200, { "Content-Type": "application/json" });
@@ -48,9 +49,14 @@ export class JudgeServer {
 			res.writeHead(404);
 			res.end();
 		});
-		this.io = SocketIO(server);
+		this.io = new SocketIOServer(server, {
+			allowEIO3: this.cfg.allowEIO3 !== false,
+			// v2 defaulted to 100 MB per message, v4 to 1 MB; keep the old limit for large sources / test inputs
+			maxHttpBufferSize: 1e8
+		});
 		this.io.on("connection", (socket: any) => this.bind(socket));
 		server.listen(this.cfg.port, this.cfg.host, () => console.log(`judge v2 listening on ${this.cfg.host}:${this.cfg.port}`));
+		return server;
 	}
 
 	status() {
